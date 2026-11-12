@@ -464,6 +464,15 @@ class App:
         self.day_cache = (now, {dev: activity(rs) for dev, rs in per.items()}, activity(rows))
         return self.day_cache[1:]
 
+    def sparks(self):
+        """Lookups per hour for the last 24 hours, oldest first, per device."""
+        now = int(time.time())
+        first = now - now % 3600 - 23 * 3600
+        out = collections.defaultdict(lambda: [0] * 24)
+        for r in self.q("SELECT dev, hour, SUM(count) c FROM dns_hourly WHERE hour>=? GROUP BY dev, hour", (first,)):
+            out[r["dev"]][(r["hour"] - first) // 3600] = r["c"]
+        return out
+
     def hints(self):
         """Best guess at what each device is, from a week of its lookups. Cached 5 minutes."""
         now = time.time()
@@ -500,12 +509,14 @@ class App:
                           1 known, 0 randomized, MIN(hour) first_seen, MAX(hour) last_seen, 0 online,
                           SUM(CASE WHEN hour>=? THEN count ELSE 0 END) queries FROM dns_hourly
                           WHERE dev LIKE 'ip:%' GROUP BY dev""", (day,))
-        hints, doing = self.hints(), self.day_activity()[0]
+        hints, doing, sparks = self.hints(), self.day_activity()[0], self.sparks()
         for r in rows:
+            r["spark"] = sparks.get(r["mac"]) or [0] * 24
             cats = doing.get(r["mac"], [])
             r["hint"] = hints.get(r["mac"], "")
             # the router and this Pi do not ask netinv for addresses, so silence from them is normal
-            r["infra"] = int(r["vendor"] == PI_VENDOR or (bool(self.a.gateway) and r["ip"] == self.a.gateway))
+            r["infra"] = ("router" if self.a.gateway and r["ip"] == self.a.gateway
+                          else "pi" if r["vendor"] == PI_VENDOR else "")
             r["mostly"] = mostly(cats)
             r["hidden"] = int(any(c["cat"] == HIDDEN for c in cats))
         return rows

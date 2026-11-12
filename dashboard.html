@@ -3,20 +3,30 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<meta name="color-scheme" content="light dark">
 <title>netinv</title>
+<script>try{if(localStorage.getItem("netinv-theme")==="light")document.documentElement.dataset.theme="light"}catch(e){}</script>
 <style>
-:root{--bg:#f6f7f9;--card:#fff;--ink:#1b1f24;--mute:#5d6878;--line:#e3e6ea;--accent:#2563eb;--soft:#2563eb1a;--ok:#15803d;--warn:#b45309;--warnbg:#b453091a;--bad:#b91c1c;--bar:#3b82f6}
-@media(prefers-color-scheme:dark){:root{--bg:#0f1216;--card:#181c22;--ink:#e6e9ee;--mute:#9aa4b2;--line:#2a3038;--accent:#7aa7ff;--soft:#7aa7ff24;--ok:#4ade80;--warn:#fbbf24;--warnbg:#fbbf241a;--bad:#f87171;--bar:#5b9bff}}
+:root{color-scheme:dark;--bg:#090c13;--card:#111725;--ink:#e8ecf3;--mute:#8d99ab;--line:#222b3c;--accent:#4cc9f0;--accent2:#8b7cf6;--soft:#4cc9f01f;--ok:#34d399;--warn:#fbbf24;--warnbg:#fbbf2414;--bad:#f87171;--bar:#4cc9f0;--on-accent:#06121a;--lift:0 0 0 1px #4cc9f012,0 18px 40px -24px #000}
+:root[data-theme=light]{color-scheme:light;--bg:#f2f4f8;--card:#fff;--ink:#141a24;--mute:#566275;--line:#dde3ec;--accent:#0b74c4;--accent2:#6d4fd8;--soft:#0b74c41a;--ok:#15803d;--warn:#b45309;--warnbg:#b453091a;--bad:#b91c1c;--bar:#0b74c4;--on-accent:#fff;--lift:0 1px 2px #1118270d,0 14px 30px -22px #11182740}
 *{box-sizing:border-box}
 body{margin:0;background:var(--bg);color:var(--ink);font:15px/1.45 system-ui,-apple-system,Segoe UI,Roboto,sans-serif}
+body::before{content:"";position:fixed;inset:0;z-index:-1;pointer-events:none;background:
+  radial-gradient(900px 520px at 6% -10%,color-mix(in srgb,var(--accent) 17%,transparent),transparent 70%),
+  radial-gradient(820px 480px at 100% -5%,color-mix(in srgb,var(--accent2) 15%,transparent),transparent 70%)}
 button,input{font:inherit;color:inherit}
 :focus-visible{outline:2px solid var(--accent);outline-offset:2px}
 .mute{color:var(--mute)}.mono{font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:12.5px}
 h1{font-size:18px;margin:0}h2{font-size:16px;margin:0 0 4px}h3{font-size:14px;margin:0}
 p{margin:0 0 10px}
 
-header{position:sticky;top:0;z-index:5;background:var(--bg);border-bottom:1px solid var(--line)}
+header{position:sticky;top:0;z-index:5;background:color-mix(in srgb,var(--bg) 78%,transparent);backdrop-filter:blur(12px);-webkit-backdrop-filter:blur(12px);border-bottom:1px solid var(--line)}
+.brand{display:flex;align-items:center;gap:9px}
+.brand svg{width:26px;height:26px}
+.brand h1{letter-spacing:.2px;background:linear-gradient(90deg,var(--ink),var(--accent));-webkit-background-clip:text;background-clip:text;color:transparent}
+#theme{background:none;border:1px solid var(--line);border-radius:8px;width:34px;height:34px;cursor:pointer;color:var(--mute);font-size:15px;line-height:1}
+#theme:hover{color:var(--ink);border-color:var(--mute)}
+@keyframes pulse{0%{box-shadow:0 0 0 0 color-mix(in srgb,var(--ok) 60%,transparent)}70%,100%{box-shadow:0 0 0 7px transparent}}
+@keyframes flow{to{stroke-dashoffset:-18}}
 .bar{display:flex;align-items:center;gap:8px 16px;flex-wrap:wrap;max-width:1280px;margin:0 auto;padding:10px 20px}
 nav{display:flex;gap:4px}
 nav button,.seg button,.chips button{background:none;border:1px solid transparent;color:var(--mute);padding:6px 12px;border-radius:8px;cursor:pointer;white-space:nowrap}
@@ -27,11 +37,12 @@ nav .n{display:inline-block;min-width:18px;margin-left:6px;padding:0 5px;border-
 #status.bad{color:var(--bad)}
 
 main{padding:16px 20px 48px;max-width:1280px;margin:0 auto}
-.card{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:16px}
+.card{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:16px;box-shadow:var(--lift)}
 .tiles{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:12px;margin-bottom:12px}
-.tile{text-align:left;cursor:pointer;transition:border-color .12s;padding:12px 16px}
-.tile:hover{border-color:var(--accent)}
-.tile b{display:block;font-size:24px;font-weight:650;line-height:1.2;font-variant-numeric:tabular-nums}
+.tile{text-align:left;cursor:pointer;transition:border-color .12s,transform .12s;padding:14px 16px;position:relative;overflow:hidden}
+.tile:hover{border-color:var(--accent);transform:translateY(-1px)}
+.tile b{display:block;font-size:28px;font-weight:700;line-height:1.15;font-variant-numeric:tabular-nums;letter-spacing:-.3px}
+.tile .spark{position:absolute;right:12px;top:16px}
 .tile span{color:var(--mute);font-size:13px}
 .tile.alert b{color:var(--warn)}
 .grid2{display:grid;grid-template-columns:minmax(0,1.25fr) minmax(0,1fr);gap:12px;align-items:start}
@@ -39,7 +50,7 @@ main{padding:16px 20px 48px;max-width:1280px;margin:0 auto}
 .stack>*+*{margin-top:12px}
 
 /* needs attention */
-#attn{border-color:var(--warn)}
+#attn{border-color:color-mix(in srgb,var(--warn) 55%,var(--line));background:linear-gradient(180deg,var(--warnbg),transparent 90px),var(--card)}
 #attn.clear{border-color:var(--line);padding:10px 16px;color:var(--mute)}
 .attn-row{display:flex;gap:12px;align-items:center;padding:10px 0;border-top:1px solid var(--line);flex-wrap:wrap}
 .attn-row .txt{flex:1 1 260px;min-width:0}
@@ -64,14 +75,38 @@ tbody tr.click:focus-visible{outline-offset:-2px}
 .fit{width:1%;white-space:nowrap;text-align:right}
 .barcell{background:linear-gradient(to right,var(--soft) var(--p,0%),transparent var(--p,0%)) no-repeat}
 #devtable{table-layout:fixed}
-#devtable th[data-sort=name]{width:46%}#devtable th[data-sort=queries]{width:78px}#devtable th[data-sort=seen]{width:86px}
+#devtable th[data-sort=name]{width:44%}#devtable th[data-sort=queries]{width:104px}#devtable th[data-sort=seen]{width:86px}
 .dev{display:flex;gap:10px;align-items:center;min-width:0}
 .dev .nm{font-weight:600;overflow-wrap:anywhere}
 .dev .sub{color:var(--mute);font-size:12.5px}
 .ico{width:34px;height:34px;border-radius:9px;background:var(--bg);border:1px solid var(--line);display:grid;place-items:center;position:relative;flex:none;color:var(--mute)}
 .ico svg{width:19px;height:19px;fill:none;stroke:currentColor;stroke-width:1.5;stroke-linecap:round;stroke-linejoin:round}
 .ico.on{color:var(--ink)}
-.ico.on::after{content:"";position:absolute;right:-3px;bottom:-3px;width:10px;height:10px;border-radius:50%;background:var(--ok);border:2px solid var(--card)}
+.ico.on{color:var(--accent);border-color:color-mix(in srgb,var(--accent) 35%,var(--line));background:var(--soft)}
+.ico.on::after{content:"";position:absolute;right:-3px;bottom:-3px;width:10px;height:10px;border-radius:50%;background:var(--ok);border:2px solid var(--card);animation:pulse 2.6s infinite}
+.spark{display:block;margin-left:auto;overflow:visible}
+.spark .ln{fill:none;stroke:var(--accent);stroke-width:1.5;stroke-linejoin:round;stroke-linecap:round}
+.spark .ar{fill:var(--soft);stroke:none}
+.spark.flat .ln{stroke:var(--line)}
+.cnt{color:var(--mute);font-size:12px}
+/* network map */
+.map{display:grid;place-items:center;padding:4px 0 8px}
+.map svg{width:100%;height:auto;display:block}
+.map .link{stroke:var(--line);stroke-width:1.5}
+.map .link.on{stroke:var(--accent);stroke-dasharray:3 6;animation:flow 1.6s linear infinite}
+.map .node{cursor:pointer;outline:none}
+.map .node circle{fill:var(--card);stroke:var(--line);stroke-width:1.5;transition:stroke .12s}
+.map .node.on circle{stroke:var(--accent);fill:color-mix(in srgb,var(--accent) 10%,var(--card))}
+.map .node.new circle{stroke:var(--warn)}
+.map .node:hover circle,.map .node:focus-visible circle{stroke:var(--ink);stroke-width:2}
+.map .node.sel circle{stroke:var(--ink);stroke-width:2.5;filter:drop-shadow(0 0 8px var(--accent))}
+.map .node .g{fill:none;stroke:var(--mute);stroke-width:1.5;stroke-linecap:round;stroke-linejoin:round}
+.map .node.on .g{stroke:var(--accent)}
+.map text{fill:var(--mute);font-size:11px;text-anchor:middle;pointer-events:none}
+.map .node.on text,.map .hub text{fill:var(--ink)}
+.map .hub circle{fill:color-mix(in srgb,var(--accent) 14%,var(--card));stroke:var(--accent);stroke-width:2}
+.map .hub .g{stroke:var(--accent)}
+.maphint{color:var(--mute);font-size:12.5px;text-align:center;margin:0}
 .dot{display:inline-block;width:8px;height:8px;border-radius:50%;background:var(--line);margin-right:6px;flex:none}
 .dot.on{background:var(--ok)}.dot.bad{background:var(--bad)}
 .tag{display:inline-block;font-size:11px;font-weight:400;padding:1px 7px;border-radius:99px;border:1px solid var(--line);color:var(--mute);margin-left:6px;white-space:nowrap;vertical-align:middle}
@@ -80,8 +115,8 @@ tbody tr.click:focus-visible{outline-offset:-2px}
 .site .d{color:var(--mute);margin-left:8px}
 
 input[type=text],input[type=search]{background:var(--card);border:1px solid var(--line);border-radius:8px;padding:8px 10px;width:100%;max-width:360px;min-width:0;flex:1 1 180px}
-button.act{background:var(--accent);color:#fff;border:0;border-radius:8px;padding:8px 14px;cursor:pointer;font-weight:600;white-space:nowrap}
-@media(prefers-color-scheme:dark){button.act{color:#0f1216}}
+button.act{background:linear-gradient(135deg,var(--accent),color-mix(in srgb,var(--accent) 70%,var(--accent2)));color:var(--on-accent);border:0;border-radius:8px;padding:8px 14px;cursor:pointer;font-weight:600;white-space:nowrap}
+button.act:hover{filter:brightness(1.08)}
 button.ghost,a.ghost{background:none;border:1px solid var(--line);border-radius:8px;padding:8px 12px;cursor:pointer;white-space:nowrap;color:var(--ink);text-decoration:none;display:inline-block}
 button.ghost:hover,a.ghost:hover{border-color:var(--mute)}
 button.mini{background:none;border:1px solid var(--line);border-radius:6px;padding:2px 8px;font-size:12px;cursor:pointer;color:var(--mute);white-space:nowrap}
@@ -101,7 +136,7 @@ button:disabled,input:disabled{opacity:.5;cursor:not-allowed}
 .chart.dense{gap:0}
 .chart>div{flex:1;height:100%;display:flex;align-items:flex-end;min-width:0}
 .chart>div:hover{background:var(--soft)}
-.chart i{width:100%;background:var(--bar);border-radius:2px 2px 0 0}
+.chart i{width:100%;background:var(--bar);border-radius:3px 3px 0 0}
 .chart>div:hover i{background:var(--accent)}
 .chart .none{position:absolute;inset:0;display:grid;place-items:center;color:var(--mute);pointer-events:none}
 .axis{display:flex;justify-content:space-between;font-size:11px;color:var(--mute);margin-top:4px}
@@ -153,19 +188,19 @@ dt{color:var(--mute)}dd{margin:0;overflow-wrap:anywhere}
 @media(max-width:640px){
   .bar{padding:10px 16px}main{padding:12px 16px 40px}
   .tiles{grid-template-columns:repeat(2,minmax(0,1fr));gap:8px}
-  .tile b{font-size:20px}
+  .tile b{font-size:22px}.tile .spark{display:none}
   .hide-s{display:none}
   #devtable th[data-sort=name]{width:48%}#devtable th[data-sort=seen]{width:74px}
   #devtable td{padding:8px 4px}.dev{gap:8px}.dev .sub{overflow-wrap:anywhere}
   nav button{padding:6px 9px}
   .attn-row .btns{width:100%}
 }
-@media(prefers-reduced-motion:reduce){*{transition:none!important;scroll-behavior:auto!important}}
+@media(prefers-reduced-motion:reduce){*{transition:none!important;animation:none!important;scroll-behavior:auto!important}}
 </style>
 </head>
 <body>
 <header><div class="bar">
-  <h1>netinv</h1>
+  <div class="brand"><svg viewBox="0 0 26 26" aria-hidden="true"><defs><linearGradient id="lg" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#4cc9f0"/><stop offset="1" stop-color="#8b7cf6"/></linearGradient></defs><g fill="none" stroke="url(#lg)" stroke-width="1.8" stroke-linecap="round"><path d="M13 13 5 6M13 13l9-5M13 13l-7 8M13 13l8 7"/></g><g fill="url(#lg)"><circle cx="13" cy="13" r="3.4"/><circle cx="5" cy="6" r="2.2"/><circle cx="22" cy="8" r="2.2"/><circle cx="6" cy="21" r="2.2"/><circle cx="21" cy="20" r="2.2"/></g></svg><h1>netinv</h1></div>
   <nav role="tablist" aria-label="Views">
     <button role="tab" id="t-devices" data-tab="devices" aria-controls="tab-devices" aria-selected="true">Devices<span class="n" id="navn" hidden></span></button>
     <button role="tab" id="t-activity" data-tab="activity" aria-controls="tab-activity" aria-selected="false" tabindex="-1">Activity</button>
@@ -173,6 +208,7 @@ dt{color:var(--mute)}dd{margin:0;overflow-wrap:anywhere}
     <button role="tab" id="t-live" data-tab="live" aria-controls="tab-live" aria-selected="false" tabindex="-1">Live</button>
   </nav>
   <span class="mute" id="status" role="status"><span class="dot" id="sdot"></span><span id="stext">loading…</span></span>
+  <button id="theme" aria-label="Switch between dark and light" title="Dark / light">☀</button>
 </div></header>
 <main>
   <section id="tab-devices" role="tabpanel" aria-labelledby="t-devices" class="stack">
@@ -188,12 +224,14 @@ dt{color:var(--mute)}dd{margin:0;overflow-wrap:anywhere}
             <button data-f="new" aria-pressed="false" title="Devices you have not named or reviewed yet">New<span class="n"></span></button>
             <button data-f="silent" aria-pressed="false" title="Online, but netinv saw no activity from them in the last 24 hours">No activity<span class="n"></span></button>
           </div>
+          <span class="seg spacer" id="viewseg" role="group" aria-label="View"><button data-view="list" aria-pressed="true">List</button><button data-view="map" aria-pressed="false">Map</button></span>
         </div>
-        <div class="scroll"><table id="devtable">
+        <div id="map" class="map" hidden></div>
+        <div class="scroll" id="listwrap"><table id="devtable">
           <thead><tr>
             <th data-sort="name"><button>Device</button></th>
             <th data-sort="mostly"><button title="What it mainly did in the last 24 hours">Mostly doing</button></th>
-            <th data-sort="queries" class="num hide-s"><button title="How many times it asked for a site's address in the last 24 hours">Lookups</button></th>
+            <th data-sort="queries" class="num hide-s"><button title="When it was active over the last 24 hours, and how many lookups it made">Activity, 24h</button></th>
             <th data-sort="seen" class="num"><button>Last seen</button></th>
           </tr></thead>
           <tbody id="devrows"></tbody>
@@ -358,6 +396,67 @@ function icon(d, big){
   return el("span", {class:"ico" + (d.online ? " on" : ""), title: d.online ? "Online" : "Offline", style: big ? "width:42px;height:42px" : null}, svg);
 }
 
+function svgEl(tag, attrs, ...kids){
+  const e = document.createElementNS(SVG, tag);
+  for (const [k,v] of Object.entries(attrs||{})) {
+    if (v == null || v === false) continue;
+    if (k.startsWith("on")) e.addEventListener(k.slice(2), v); else e.setAttribute(k, v);
+  }
+  e.append(...nodes(kids));
+  return e;
+}
+// Small line of the last 24 hours, oldest on the left. No axes: the number next to it carries the scale.
+function spark(vals, w, h){
+  vals = vals && vals.length ? vals : [0];
+  const max = Math.max(...vals), n = vals.length, x = i => n > 1 ? i / (n - 1) * w : w / 2, y = v => max ? h - 1 - v / max * (h - 3) : h - 1;
+  const line = vals.map((v, i) => `${i ? "L" : "M"}${x(i).toFixed(1)} ${y(v).toFixed(1)}`).join("");
+  return svgEl("svg", {class:"spark" + (max ? "" : " flat"), width:w, height:h, viewBox:`0 0 ${w} ${h}`, "aria-hidden":"true"},
+    max ? svgEl("path", {class:"ar", d:`${line}L${w} ${h}L0 ${h}Z`}) : null, svgEl("path", {class:"ln", d:line}));
+}
+function sparkTip(vals){
+  const total = vals.reduce((a, b) => a + b, 0);
+  if (!total) return "No activity in the last 24 hours";
+  const peak = vals.indexOf(Math.max(...vals)), now = Math.floor(Date.now()/1000), t = now - now % 3600 - (23 - peak) * 3600;
+  return `${fmt(total)} lookups in the last 24 hours, busiest around ${new Date(t*1000).toLocaleTimeString([], {hour:"numeric"})}`;
+}
+
+// ---- network map -----------------------------------------------------------
+// The router in the middle, every device around it: circle size and line brightness by how much it did.
+function renderMap(list){
+  const hub = devices.find(d => d.infra === "router"), rest = list.filter(d => d !== hub)
+    .sort((a, b) => (b.online - a.online) || (b.queries - a.queries));
+  const rings = [];
+  for (let i = 0, k = 0; i < rest.length; k++) {
+    const r = 128 + k * 96, cap = Math.max(6, Math.floor(2 * Math.PI * r / 100));
+    rings.push({r, items: rest.slice(i, i + cap)}); i += cap;
+  }
+  const R = (rings.length ? rings[rings.length - 1].r : 128) + 74, maxQ = Math.max(1, ...rest.map(d => d.queries));
+  const short = t => t.length > 18 ? t.slice(0, 17).trimEnd() + "…" : t;
+  const glyph = d => { const g = svgEl("g", {class:"g", transform:"translate(-10 -10)"}); g.innerHTML = ICONS[kindOf(d)]; return g; };
+  const links = [], marks = [];
+  rings.forEach((ring, k) => ring.items.forEach((d, j) => {
+    const a = (-90 + 360 * j / ring.items.length + (k % 2 ? 180 / ring.items.length : 0)) * Math.PI / 180;
+    const x = Math.cos(a) * ring.r, y = Math.sin(a) * ring.r, w = Math.sqrt(d.queries / maxQ), rad = 17 + 8 * w;
+    links.push(svgEl("line", {class:"link" + (d.online && d.queries ? " on" : ""), x1:0, y1:0, x2:x.toFixed(1), y2:y.toFixed(1), "stroke-opacity": d.online ? (.3 + .7 * w).toFixed(2) : .5}));
+    const go = () => select(d.mac);
+    marks.push(svgEl("g", {class:"node" + (d.online ? " on" : "") + (d.known ? "" : " new") + (d.mac === selected ? " sel" : ""), transform:`translate(${x.toFixed(1)} ${y.toFixed(1)})`,
+        tabindex:0, role:"button", "data-mac":d.mac, "aria-label":`${devName(d)}, ${d.online ? "online" : "offline"}${d.mostly ? ", mostly " + d.mostly : ""}`,
+        onclick:go, onkeydown:e => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); go(); } }},
+      svgEl("title", {}, `${devName(d)}${d.known ? "" : " (new)"} · ${d.online ? "online" : "offline"}${d.mostly ? " · " + d.mostly : ""}`),
+      svgEl("circle", {r:rad.toFixed(1)}), glyph(d), svgEl("text", {y:(rad + 14).toFixed(1)}, short(devName(d)))));
+  }));
+  const hubGo = hub ? () => select(hub.mac) : null;
+  const center = svgEl("g", {class:"node hub" + (hub && hub.mac === selected ? " sel" : ""), tabindex: hub ? 0 : null, role: hub ? "button" : null, "aria-label": hub ? devName(hub) : null,
+      onclick:hubGo, onkeydown: hub ? e => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); hubGo(); } } : null},
+    svgEl("circle", {r:27}), (() => { const g = svgEl("g", {class:"g", transform:"translate(-10 -10)"}); g.innerHTML = ICONS.router; return g; })(),
+    svgEl("text", {y:42}, hub ? short(devName(hub)) : "Your network"));
+  const focused = document.activeElement && document.activeElement.dataset ? document.activeElement.dataset.mac : null;
+  fill($("#map"),
+    svgEl("svg", {viewBox:`${-R} ${-R} ${2*R} ${2*R}`, style:`max-width:${Math.round(2*R*1.35)}px`, role:"group", "aria-label":"Map of devices on your network"}, links, marks, center),
+    el("p", {class:"maphint"}, rest.length ? "Bigger circles and brighter lines mean more activity. Orange rings are new devices. Click one to open it." : "No devices match."));
+  if (focused) { const n = $("#map").querySelector(`[data-mac="${CSS.escape(focused)}"]`); if (n) n.focus(); }
+}
+
 // ---- activity --------------------------------------------------------------
 function chart(points, hours){
   // One bar per hour up to 14 days, then wider buckets. Gaps are filled so quiet hours show as empty slots.
@@ -402,6 +501,8 @@ function sentence(acts){
 
 let devices = [], byMac = new Map(), selected = null, range = 24, group = "base", tab = "devices";
 let filter = "all", sort = {key:null, dir:1}, liveRows = [], livePaused = false, labelInput = null;
+let view = "list";
+try { if (localStorage.getItem("netinv-view") === "map") view = "map"; } catch (e) {}
 let blocked = new Set(), canBlock = false, attention = [], attnSeen = "", attnAll = false, techOpen = false;
 
 // ---- blocking --------------------------------------------------------------
@@ -486,6 +587,12 @@ async function loadSummary(){
   blocked = new Set(s.blocked); canBlock = s.can_block;
   for (const [k] of TILES) $("#tile-" + k + " b").textContent = fmt(s[k]);
   $("#tile-unknown").classList.toggle("alert", s.unknown > 0);
+  { // the network's last 24 hours, drawn into the lookups tile
+    const now = Math.floor(Date.now()/1000), first = now - now % 3600 - 23 * 3600, vals = Array(24).fill(0);
+    for (const p of s.hourly) { const i = (p.hour - first) / 3600; if (i >= 0 && i < 24) vals[i] = p.c; }
+    const old = $("#tile-queries .spark"), sp = spark(vals, 76, 28);
+    if (old) old.replaceWith(sp); else $("#tile-queries").append(sp);
+  }
   if (tab !== "activity") return;
   fill($("#netchart"), chart(s.hourly, 24));
   fill($("#netacts"), activityList(s.activity) || el("div", {class:"empty"}, "Nothing seen in the last 24 hours."));
@@ -601,9 +708,11 @@ function renderDevices(){
         el("div", {class:"sub"}, sub)))),
       el("td", {class: d.mostly ? "" : "mute"}, d.mostly || (isSilent(d) ? "Nothing visible" : d.infra ? "Runs the network" : "–"),
         d.hidden ? el("span", {class:"tag", title:"Uses a VPN, iCloud Private Relay or private DNS: part of what it does is not visible"}, "partly hidden") : null),
-      el("td", {class:"num hide-s"}, fmt(d.queries)),
+      el("td", {class:"num hide-s", title:sparkTip(d.spark)}, spark(d.spark, 84, 22), el("div", {class:"cnt"}, fmt(d.queries))),
       el("td", {class:"num"}, d.online ? "online" : ago(d.last_seen)));
   });
+  $("#map").hidden = view !== "map"; $("#listwrap").hidden = view === "map";
+  if (view === "map") renderMap(list);
   const none = !devices.length ? "No devices yet. The first check of your network is still running." : "No devices match.";
   fill($("#devrows"), rows.length ? rows : el("tr", {}, el("td", {colspan:4, class:"empty"}, none,
     devices.length && (f || filter !== "all") ? [" ", el("button", {class:"link", onclick:() => showDevices("all")}, "Show all")] : null)));
@@ -793,6 +902,21 @@ for (const b of document.querySelectorAll("nav button")) {
 }
 addEventListener("hashchange", () => { const h = readHash(); setTab(h.t); if (h.t === "devices" && h.mac && h.mac !== selected) select(h.mac, false); });
 $("#devfilter").addEventListener("input", renderDevices);
+function setView(v){
+  view = v;
+  try { localStorage.setItem("netinv-view", v); } catch (e) {}
+  for (const b of document.querySelectorAll("#viewseg button")) b.setAttribute("aria-pressed", String(b.dataset.view === v));
+  renderDevices();
+}
+for (const b of document.querySelectorAll("#viewseg button")) b.addEventListener("click", () => setView(b.dataset.view));
+setView(view);
+$("#theme").addEventListener("click", () => {
+  const light = document.documentElement.dataset.theme !== "light";
+  if (light) document.documentElement.dataset.theme = "light"; else delete document.documentElement.dataset.theme;
+  try { localStorage.setItem("netinv-theme", light ? "light" : "dark"); } catch (e) {}
+  $("#theme").textContent = light ? "☾" : "☀";
+});
+if (document.documentElement.dataset.theme === "light") $("#theme").textContent = "☾";
 
 async function refresh(){
   try {
