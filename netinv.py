@@ -8,6 +8,9 @@ Three threads, one SQLite file, standard library only:
 """
 import argparse
 import collections
+import csv
+import functools
+import io
 import ipaddress
 import json
 import os
@@ -43,6 +46,146 @@ QUERY_RE = re.compile(
     r"^(\w{3})\s+(\d+)\s+(\d\d:\d\d:\d\d)\s+dnsmasq\[\d+\]:\s+(?:\d+\s+\S+\s+)?"
     r"query\[([\w-]+)\]\s+(\S+)\s+from\s+(\S+)")
 SECOND_LEVEL = {"co", "com", "net", "org", "gov", "ac", "edu", "or", "ne", "go"}
+
+# Lookups that give away what a device is, for devices that report no name.
+# (guess, is an operating system, domain suffixes). An OS match counts triple:
+# a phone with the Ring app is still a phone, a Ring doorbell never asks for icloud.com.
+FINGERPRINTS = [
+    ("Apple device (iPhone, iPad or Mac)", 1, "icloud.com push.apple.com captive.apple.com gs-loc.apple.com "
+                                              "mesu.apple.com mzstatic.com apple-dns.net"),
+    ("Android phone or tablet", 1, "connectivitycheck.gstatic.com connectivitycheck.android.com "
+                                   "android.clients.google.com android.googleapis.com"),
+    ("Windows PC", 1, "msftconnecttest.com msftncsi.com windowsupdate.com wns.windows.com"),
+    ("Linux computer", 1, "connectivity-check.ubuntu.com ntp.ubuntu.com fedoraproject.org archlinux.org"),
+    ("Raspberry Pi", 1, "raspberrypi.com raspberrypi.org"),
+    ("Samsung TV", 0, "samsungcloudsolution.com samsungcloudsolution.net samsungacr.com samsungads.com"),
+    ("LG TV", 0, "lgtvsdp.com lgsmartad.com lgappstv.com lgtvcommon.com"),
+    ("Roku", 0, "roku.com"),
+    ("Amazon Echo or Fire device", 0, "amazonalexa.com device-metrics-us.amazon.com"),
+    ("Google Nest device", 0, "nest.com"),
+    ("Sonos speaker", 0, "sonos.com"),
+    ("Xbox", 0, "xboxlive.com"),
+    ("PlayStation", 0, "playstation.net playstation.com"),
+    ("Nintendo console", 0, "nintendo.net nintendowifi.net"),
+    ("Ring doorbell or camera", 0, "ring.com"),
+    ("Wyze camera or sensor", 0, "wyzecam.com wyze.com"),
+    ("Philips Hue bridge", 0, "meethue.com"),
+    ("TP-Link / Kasa smart device", 0, "tplinkcloud.com tplinkra.com tplinknbu.com"),
+    ("Tuya-based smart plug or bulb", 0, "tuyaus.com tuyaeu.com tuyacn.com tuya.com"),
+    ("ecobee thermostat", 0, "ecobee.com"),
+    ("Robot vacuum (iRobot)", 0, "irobotapi.com"),
+    ("HP printer", 0, "hpeprint.com hpconnected.com"),
+    ("Epson printer", 0, "epsonconnect.com"),
+]
+HINT_SUFFIX = {s: (guess, is_os) for guess, is_os, sufs in FINGERPRINTS for s in sufs.split()}
+
+# What a lookup means in plain words: category -> "Service=suffix suffix; Service=suffix".
+# Far from complete on purpose; anything not listed is reported as "Other".
+OTHER, HIDDEN = "Other", "VPN & encrypted DNS"
+BACKGROUND = {"System services", "Cloud & CDN", "Ads & tracking"}  # happens without anyone doing anything
+SERVICES = {
+    "Streaming video": "Netflix=netflix.com nflxvideo.net nflximg.net nflxso.net nflxext.com; "
+                       "YouTube=youtube.com googlevideo.com ytimg.com youtu.be youtubei.googleapis.com; "
+                       "Disney+=disneyplus.com disney-plus.net bamgrid.com dssott.com; Hulu=hulu.com hulustream.com; "
+                       "Prime Video=primevideo.com aiv-cdn.net aiv-delivery.net; Max=max.com hbomax.com; "
+                       "Twitch=twitch.tv ttvnw.net jtvnw.net; Plex=plex.tv plex.direct; Peacock=peacocktv.com; "
+                       "Paramount+=paramountplus.com; Apple TV=tv.apple.com; Roku=roku.com; Vimeo=vimeo.com vimeocdn.com",
+    "Music & audio": "Spotify=spotify.com scdn.co spotifycdn.com; Apple Music=music.apple.com itunes.apple.com; "
+                     "Pandora=pandora.com; SoundCloud=soundcloud.com sndcdn.com; Sonos=sonos.com; TuneIn=tunein.com; "
+                     "Audible=audible.com; iHeart=iheart.com",
+    "Social media": "Facebook=facebook.com fbcdn.net facebook.net fbsbx.com; Instagram=instagram.com cdninstagram.com; "
+                    "TikTok=tiktok.com tiktokcdn.com tiktokcdn-us.com tiktokv.com tiktokv.us byteoversea.com ibytedtos.com musical.ly; "
+                    "Snapchat=snapchat.com sc-cdn.net; X (Twitter)=twitter.com x.com twimg.com t.co; "
+                    "Reddit=reddit.com redd.it redditmedia.com redditstatic.com; Pinterest=pinterest.com pinimg.com; "
+                    "LinkedIn=linkedin.com licdn.com; Threads=threads.net; Bluesky=bsky.app bsky.social",
+    "Messaging & calls": "WhatsApp=whatsapp.com whatsapp.net; Discord=discord.com discord.gg discordapp.com discordapp.net discord.media; "
+                         "Telegram=telegram.org t.me; Signal=signal.org; Zoom=zoom.us zoom.com; Messenger=messenger.com; "
+                         "Slack=slack.com slack-edge.com slackb.com; Skype / Teams=skype.com teams.microsoft.com teams.live.com; "
+                         "FaceTime / iMessage=facetime.apple.com ess.apple.com",
+    "Gaming": "Steam=steampowered.com steamcommunity.com steamstatic.com steamcontent.com; Xbox=xboxlive.com xbox.com; "
+              "PlayStation=playstation.net playstation.com sonyentertainmentnetwork.com; "
+              "Nintendo=nintendo.net nintendo.com nintendowifi.net; Epic Games=epicgames.com epicgames.dev fortnite.com; "
+              "Roblox=roblox.com rbxcdn.com; Riot Games=riotgames.com leagueoflegends.com; Blizzard=blizzard.com battle.net; "
+              "EA=ea.com origin.com; Minecraft=minecraft.net mojang.com minecraftservices.com",
+    "Shopping": "Amazon=amazon.com amazon.ca amazon.co.uk media-amazon.com ssl-images-amazon.com; eBay=ebay.com ebaystatic.com ebayimg.com; "
+                "Walmart=walmart.com walmartimages.com; Etsy=etsy.com etsystatic.com; Target=target.com; Temu=temu.com; "
+                "Shein=shein.com; AliExpress=aliexpress.com alicdn.com; Costco=costco.com; Best Buy=bestbuy.com",
+    "Email & work": "Microsoft 365=office.com office365.com office.net outlook.com sharepoint.com onedrive.com microsoftonline.com; "
+                    "Gmail=gmail.com mail.google.com; Google Docs=docs.google.com drive.google.com; "
+                    "GitHub=github.com githubusercontent.com githubassets.com; Dropbox=dropbox.com dropboxapi.com dropboxstatic.com; "
+                    "Notion=notion.so; Atlassian=atlassian.com atlassian.net; Yahoo Mail=mail.yahoo.com; Proton=proton.me protonmail.com",
+    "AI assistants": "ChatGPT=openai.com chatgpt.com oaistatic.com oaiusercontent.com; Claude=claude.ai anthropic.com; "
+                     "Gemini=gemini.google.com; Copilot=copilot.microsoft.com; Perplexity=perplexity.ai",
+    "Search & reference": "Bing=bing.com; DuckDuckGo=duckduckgo.com; Wikipedia=wikipedia.org wikimedia.org; "
+                          "Yahoo=yahoo.com yimg.com; Google Search=www.google.com",
+    "Smart home": "Ring=ring.com; Google Nest=nest.com; Alexa=amazonalexa.com device-metrics-us.amazon.com; "
+                  "Tuya=tuya.com tuyaus.com tuyaeu.com tuyacn.com; TP-Link / Kasa=tplinkcloud.com tplinkra.com tplinknbu.com; "
+                  "Philips Hue=meethue.com; Wyze=wyze.com wyzecam.com; ecobee=ecobee.com; SmartThings=smartthings.com; "
+                  "iRobot=irobot.com irobotapi.com; Home Assistant=home-assistant.io nabucasa.com; Arlo=arlo.com; "
+                  "Eufy=eufylife.com; Govee=govee.com; myQ=myqdevice.com",
+    "Adult sites": "Pornhub=pornhub.com phncdn.com; XVideos=xvideos.com; xHamster=xhamster.com; XNXX=xnxx.com; OnlyFans=onlyfans.com",
+    HIDDEN: "iCloud Private Relay=mask.icloud.com mask-h2.icloud.com mask-api.icloud.com; Google DNS-over-HTTPS=dns.google; "
+            "Cloudflare DNS-over-HTTPS=cloudflare-dns.com one.one.one.one; Quad9 DNS=quad9.net; NextDNS=nextdns.io; "
+            "AdGuard DNS=adguard-dns.com; NordVPN=nordvpn.com nordvpn.net; ExpressVPN=expressvpn.com; "
+            "Proton VPN=protonvpn.com protonvpn.ch; Mullvad=mullvad.net; Surfshark=surfshark.com; Tailscale=tailscale.com; "
+            "Tor=torproject.org",
+    "Ads & tracking": "Google ads & analytics=doubleclick.net googlesyndication.com googleadservices.com google-analytics.com "
+                      "googletagmanager.com googletagservices.com app-measurement.com crashlytics.com; "
+                      "Amazon ads=amazon-adsystem.com; Meta ads=graph.facebook.com an.facebook.com; "
+                      "Smart TV ad tracking=samsungads.com samsungacr.com lgsmartad.com; "
+                      "Ad networks=adnxs.com criteo.com criteo.net taboola.com outbrain.com rubiconproject.com pubmatic.com "
+                      "openx.net adsrvr.org moatads.com quantserve.com applovin.com unityads.unity3d.com scorecardresearch.com; "
+                      "App analytics=branch.io appsflyer.com adjust.com mixpanel.com segment.io segment.com amplitude.com "
+                      "newrelic.com nr-data.net sentry.io hotjar.com demdex.net omtrdc.net bugsnag.com",
+    "System services": "Apple=apple.com icloud.com mzstatic.com apple-dns.net aaplimg.com icloud-content.com cdn-apple.com; "
+                       "Google=google.com gstatic.com googleapis.com googleusercontent.com gvt1.com gvt2.com ggpht.com android.com; "
+                       "Microsoft=microsoft.com windows.com windowsupdate.com msftconnecttest.com msftncsi.com live.com msn.com "
+                       "windows.net msedge.net; Samsung=samsung.com samsungcloudsolution.com samsungcloudsolution.net; "
+                       "LG=lgtvsdp.com lgappstv.com lgtvcommon.com; Time sync=ntp.org time.nist.gov; "
+                       "Linux updates=ubuntu.com canonical.com debian.org raspberrypi.com raspberrypi.org fedoraproject.org; "
+                       "Mozilla=mozilla.org mozilla.com mozilla.net firefox.com",
+    "Cloud & CDN": "Amazon Web Services=amazonaws.com cloudfront.net awsstatic.com; "
+                   "Akamai=akamai.net akamaiedge.net akamaihd.net akamaized.net edgekey.net edgesuite.net akadns.net; "
+                   "Cloudflare=cloudflare.com cloudflare.net cdnjs.com; Fastly=fastly.net fastlylb.net; "
+                   "Microsoft Azure=azure.com azureedge.net trafficmanager.net cloudapp.net azurewebsites.net; Google Cloud=1e100.net",
+}
+SERVICE = {dom: (item.partition("=")[0].strip(), cat) for cat, src in SERVICES.items()
+           for item in src.split(";") for dom in item.partition("=")[2].split()}
+
+
+@functools.lru_cache(maxsize=50000)
+def classify(domain):
+    """(service, category) for a looked-up name, by longest matching suffix."""
+    name = domain
+    while name:
+        if name in SERVICE:
+            return SERVICE[name]
+        name = name.partition(".")[2]
+    return "", OTHER
+
+
+def activity(rows):
+    """Roll (domain, count) rows up into categories, biggest first, with the services seen in each."""
+    cats, svcs = collections.Counter(), collections.defaultdict(collections.Counter)
+    for r in rows:
+        svc, cat = classify(r["domain"])
+        cats[cat] += r["c"]
+        if svc:
+            svcs[cat][svc] += r["c"]
+    return [{"cat": cat, "c": c, "background": cat in BACKGROUND or cat == OTHER,
+             "services": [n for n, _ in svcs[cat].most_common(4)]} for cat, c in cats.most_common()]
+
+
+def mostly(cats):
+    """One short phrase for the device list: what a device mainly did, ignoring background chatter."""
+    total = sum(c["c"] for c in cats)
+    if not total:
+        return ""
+    fg = [c["cat"] for c in cats if not c["background"] and c["c"] >= max(2, total * 0.03)]
+    if fg:
+        return ", ".join(fg[:2])
+    other = sum(c["c"] for c in cats if c["cat"] == OTHER)
+    return "Other sites" if other > total / 2 else "Background only"
 
 
 def base_domain(name):
@@ -81,6 +224,8 @@ class App:
                     self.ipmap[ip] = r["mac"]
         self.live = collections.deque(maxlen=300)
         self.last_scan = 0
+        self.hint_cache = (0, {})
+        self.day_cache = (0, {}, [])
 
     # ---- db helpers -------------------------------------------------------
     def q(self, sql, args=()):
@@ -264,14 +409,55 @@ class App:
                       COALESCE(SUM(known=0),0) unknown FROM devices""", (self.online_cutoff(),))[0]
         t = self.q("SELECT COALESCE(SUM(count),0) queries, COUNT(DISTINCT base) domains FROM dns_hourly WHERE hour>=?",
                    (day,))[0]
+        named = lambda rows: [{**r, "svc": classify(r["name"])[0]} for r in rows]
+        top = self.q("""SELECT base name, SUM(count) c, COUNT(DISTINCT dev) devs FROM dns_hourly
+                        WHERE hour>=? GROUP BY base ORDER BY c DESC LIMIT 15""", (day,))
+        fresh = self.q("""SELECT base name, MIN(hour) first, SUM(count) c, COUNT(DISTINCT dev) devs
+                          FROM dns_hourly GROUP BY base HAVING first>=? ORDER BY first DESC, c DESC LIMIT 15""", (day,))
         return {
-            **d, **t, "last_scan": self.last_scan, "now": now,
+            **d, **t, "last_scan": self.last_scan, "now": now, "activity": self.day_activity()[1],
+            "top": named(top), "fresh": named(fresh),
             "hourly": self.q("SELECT hour, SUM(count) c FROM dns_hourly WHERE hour>=? GROUP BY hour ORDER BY hour", (day,)),
-            "top": self.q("""SELECT base name, SUM(count) c, COUNT(DISTINCT dev) devs FROM dns_hourly
-                             WHERE hour>=? GROUP BY base ORDER BY c DESC LIMIT 15""", (day,)),
-            "fresh": self.q("""SELECT base name, MIN(hour) first, SUM(count) c, COUNT(DISTINCT dev) devs
-                               FROM dns_hourly GROUP BY base HAVING first>=? ORDER BY first DESC, c DESC LIMIT 15""", (day,)),
         }
+
+    def day_activity(self):
+        """Last 24h rolled up into categories: ({device: categories}, whole network). Cached a minute."""
+        now = time.time()
+        if now - self.day_cache[0] < 60:
+            return self.day_cache[1:]
+        rows = self.q("SELECT dev, domain, SUM(count) c FROM dns_hourly WHERE hour>=? GROUP BY dev, domain",
+                      (int(now) - 86400,))
+        per = collections.defaultdict(list)
+        for r in rows:
+            per[r["dev"]].append(r)
+        self.day_cache = (now, {dev: activity(rs) for dev, rs in per.items()}, activity(rows))
+        return self.day_cache[1:]
+
+    def hints(self):
+        """Best guess at what each device is, from a week of its lookups. Cached 5 minutes."""
+        now = time.time()
+        if now - self.hint_cache[0] < 300:
+            return self.hint_cache[1]
+        bases = sorted({base_domain(s) for s in HINT_SUFFIX})
+        rows = self.q(f"""SELECT dev, domain, SUM(count) c FROM dns_hourly WHERE hour>=? AND base IN
+                          ({",".join("?" * len(bases))}) GROUP BY dev, domain""", (int(now) - 7 * 86400, *bases))
+        score = collections.defaultdict(collections.Counter)
+        for r in rows:
+            name = r["domain"]
+            while name:  # suffix match: a.b.icloud.com -> b.icloud.com -> icloud.com
+                if name in HINT_SUFFIX:
+                    guess, is_os = HINT_SUFFIX[name]
+                    score[r["dev"]][(is_os, guess)] += r["c"]
+                    break
+                name = name.partition(".")[2]
+        out = {}
+        for dev, s in score.items():
+            # an OS match wins unless something else dwarfs it (an Xbox pings Microsoft too)
+            (is_os, guess), n = max(s.items(), key=lambda kv: kv[1] * (3 if kv[0][0] else 1))
+            if n >= 2:
+                out[dev] = guess
+        self.hint_cache = (now, out)
+        return out
 
     def api_devices(self, p):
         day = int(time.time()) - 86400
@@ -283,16 +469,40 @@ class App:
                           1 known, 0 randomized, MIN(hour) first_seen, MAX(hour) last_seen, 0 online,
                           SUM(CASE WHEN hour>=? THEN count ELSE 0 END) queries FROM dns_hourly
                           WHERE dev LIKE 'ip:%' GROUP BY dev""", (day,))
+        hints, doing = self.hints(), self.day_activity()[0]
+        for r in rows:
+            cats = doing.get(r["mac"], [])
+            r["hint"] = hints.get(r["mac"], "")
+            r["mostly"] = mostly(cats)
+            r["hidden"] = int(any(c["cat"] == HIDDEN for c in cats))
         return rows
+
+    def devices_csv(self):
+        iso = lambda ts: time.strftime("%Y-%m-%d %H:%M", time.localtime(ts)) if ts else ""
+        # names come off the network: stop a spreadsheet from running one as a formula
+        safe = lambda v: "'" + v if isinstance(v, str) and v and v[0] in "=+-@" else v
+        out = io.StringIO()
+        w = csv.writer(out)
+        w.writerow(["label", "hostname", "looks_like", "vendor", "ip", "mac", "private_mac", "reviewed", "online",
+                    "first_seen", "last_seen", "lookups_24h", "mostly_24h"])
+        for r in self.api_devices({}):
+            w.writerow([safe(v) for v in (
+                r["label"], r["hostname"] or "", r["hint"], r["vendor"] or "", r["ip"] or "",
+                "" if r["mac"].startswith("ip:") else r["mac"], r["randomized"], r["known"], r["online"],
+                iso(r["first_seen"]), iso(r["last_seen"]), r["queries"], r["mostly"])])
+        return out.getvalue().encode("utf-8-sig")
 
     def api_device(self, p):
         hours = min(max(int(p.get("hours", 24)), 1), 24 * 365)
         col = "domain" if p.get("group") == "domain" else "base"
         since = int(time.time()) - hours * 3600
         mac = p.get("mac", "")
+        top = self.q(f"""SELECT {col} name, SUM(count) c, MAX(hour) last FROM dns_hourly
+                         WHERE dev=? AND hour>=? GROUP BY name ORDER BY c DESC LIMIT 50""", (mac, since))
         return {
-            "top": self.q(f"""SELECT {col} name, SUM(count) c, MAX(hour) last FROM dns_hourly
-                              WHERE dev=? AND hour>=? GROUP BY name ORDER BY c DESC LIMIT 50""", (mac, since)),
+            "top": [{**r, "svc": classify(r["name"])[0]} for r in top],
+            "activity": activity(self.q("SELECT domain, SUM(count) c FROM dns_hourly WHERE dev=? AND hour>=? GROUP BY domain",
+                                        (mac, since))),
             "hourly": self.q("SELECT hour, SUM(count) c FROM dns_hourly WHERE dev=? AND hour>=? GROUP BY hour ORDER BY hour",
                              (mac, since)),
         }
@@ -308,8 +518,9 @@ class App:
                       (like,))
 
     def api_live(self, p):
-        names = {r["mac"]: r["label"] or r["hostname"] or r["vendor"] or r["mac"]
-                 for r in self.q("SELECT mac, label, hostname, vendor FROM devices")}
+        hints = self.hints()
+        names = {r["mac"]: r["label"] or r["hostname"] or hints.get(r["mac"]) or r["vendor"] or "Unknown device " + r["ip"]
+                 for r in self.q("SELECT mac, ip, label, hostname, vendor FROM devices")}
         return [{**e, "name": names.get(e["dev"], e["ip"])} for e in reversed(self.live)]
 
     def api_update(self, body):
@@ -337,11 +548,13 @@ class Handler(BaseHTTPRequestHandler):
         except ValueError:
             return h in self.server.allowed_hosts
 
-    def send(self, code, body, ctype="application/json"):
+    def send(self, code, body, ctype="application/json", filename=None):
         if not isinstance(body, bytes):
             body = json.dumps(body).encode()
         self.send_response(code)
         self.send_header("Content-Type", ctype)
+        if filename:
+            self.send_header("Content-Disposition", f'attachment; filename="{filename}"')
         self.send_header("Content-Length", str(len(body)))
         self.send_header("Cache-Control", "no-store")
         self.send_header("X-Content-Type-Options", "nosniff")
@@ -358,6 +571,8 @@ class Handler(BaseHTTPRequestHandler):
         if u.path == "/":
             with open(os.path.join(HERE, "dashboard.html"), "rb") as f:
                 return self.send(200, f.read(), "text/html; charset=utf-8")
+        if u.path == "/api/devices.csv":
+            return self.send(200, app.devices_csv(), "text/csv; charset=utf-8", "netinv-devices.csv")
         fn = {"/api/summary": app.api_summary, "/api/devices": app.api_devices, "/api/device": app.api_device,
               "/api/domain": app.api_domain, "/api/live": app.api_live}.get(u.path)
         if not fn:

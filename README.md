@@ -5,6 +5,8 @@ Home network inventory and DNS activity, on a Raspberry Pi.
 - **Inventory**: ARP sweep of the LAN every 60 s. Each device gets a row keyed by MAC with IP, vendor, hostname, first/last seen, a label you set, and a "new" flag until you review it.
 - **Traffic (DNS level)**: the Pi runs dnsmasq as the network's DNS forwarder with query logging. netinv follows that log and attributes every lookup to a device.
 - **Dashboard**: `http://<pi-ip>:8080`. Devices, per-device domains over 24h/7d/30d, network-wide top domains, domains first seen in the last 24h, "which devices looked up X", and a live tail.
+- **What is it, what is it doing**: a device that reports no name gets a guess from its lookups ("Apple device", "Samsung TV", "Tuya-based smart plug"), marked as a guess until you label it. Lookups are rolled up into plain categories (streaming, social, gaming, smart home, ads, VPN & encrypted DNS…) per device and for the whole network. Both come from a built-in list in `netinv.py` (`FINGERPRINTS`, `SERVICES`); anything not on it shows as "Other sites". Shares are by number of lookups, not time or data.
+- **Review queue**: new devices are flagged until you label them or mark them reviewed; "Next to review" walks through the rest. "Export CSV" downloads the inventory.
 
 One Python file, standard library only, one SQLite database.
 

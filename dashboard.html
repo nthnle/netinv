@@ -3,85 +3,206 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="color-scheme" content="light dark">
 <title>netinv</title>
 <style>
-:root{--bg:#f6f7f9;--card:#fff;--ink:#1b1f24;--mute:#667085;--line:#e3e6ea;--accent:#2563eb;--ok:#15803d;--warn:#b45309;--bar:#3b82f6}
-@media(prefers-color-scheme:dark){:root{--bg:#0f1216;--card:#181c22;--ink:#e6e9ee;--mute:#9aa4b2;--line:#2a3038;--accent:#7aa7ff;--ok:#4ade80;--warn:#fbbf24;--bar:#5b9bff}}
+:root{--bg:#f6f7f9;--card:#fff;--ink:#1b1f24;--mute:#5d6878;--line:#e3e6ea;--accent:#2563eb;--soft:#2563eb1a;--ok:#15803d;--warn:#b45309;--bad:#b91c1c;--bar:#3b82f6}
+@media(prefers-color-scheme:dark){:root{--bg:#0f1216;--card:#181c22;--ink:#e6e9ee;--mute:#9aa4b2;--line:#2a3038;--accent:#7aa7ff;--soft:#7aa7ff24;--ok:#4ade80;--warn:#fbbf24;--bad:#f87171;--bar:#5b9bff}}
 *{box-sizing:border-box}
 body{margin:0;background:var(--bg);color:var(--ink);font:14px/1.45 system-ui,-apple-system,Segoe UI,Roboto,sans-serif}
-header{display:flex;align-items:baseline;gap:12px;padding:16px 20px 0}
+button,input{font:inherit;color:inherit}
+:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+.mute{color:var(--mute)}.mono{font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:12.5px}
 h1{font-size:18px;margin:0}h2{font-size:14px;margin:0 0 10px}
-.mute{color:var(--mute)}.mono{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:12.5px}
-main{padding:16px 20px 40px;max-width:1280px}
-.tiles{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:12px;margin-bottom:16px}
+
+header{position:sticky;top:0;z-index:5;background:var(--bg);border-bottom:1px solid var(--line)}
+.bar{display:flex;align-items:center;gap:8px 16px;flex-wrap:wrap;max-width:1280px;margin:0 auto;padding:10px 20px}
+nav{display:flex;gap:4px}
+nav button,.seg button,.chips button{background:none;border:1px solid transparent;color:var(--mute);padding:6px 12px;border-radius:8px;cursor:pointer;white-space:nowrap}
+nav button:hover,.seg button:hover,.chips button:hover{color:var(--ink)}
+nav button[aria-selected=true],.seg button[aria-pressed=true],.chips button[aria-pressed=true]{background:var(--card);border-color:var(--line);color:var(--ink);font-weight:600}
+#status{margin-left:auto;display:flex;align-items:center;white-space:nowrap}
+#status.bad{color:var(--bad)}
+
+main{padding:16px 20px 48px;max-width:1280px;margin:0 auto}
 .card{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:14px}
-.tile b{display:block;font-size:26px;font-weight:650}
+.tiles{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:12px;margin-bottom:16px}
+.tile{text-align:left;cursor:pointer;transition:border-color .12s}
+.tile:hover{border-color:var(--accent)}
+.tile b{display:block;font-size:26px;font-weight:650;line-height:1.2;font-variant-numeric:tabular-nums}
+.tile span{color:var(--mute)}
 .tile.alert b{color:var(--warn)}
-nav{display:flex;gap:4px;margin-bottom:12px}
-nav button,.seg button{background:none;border:1px solid transparent;color:var(--mute);padding:6px 12px;border-radius:8px;font:inherit;cursor:pointer}
-nav button[aria-selected=true],.seg button[aria-pressed=true]{background:var(--card);border-color:var(--line);color:var(--ink);font-weight:600}
-.grid2{display:grid;grid-template-columns:1fr 1fr;gap:12px}
-@media(max-width:900px){.grid2{grid-template-columns:1fr}}
-table{width:100%;border-collapse:collapse}
-th{text-align:left;font-weight:600;color:var(--mute);font-size:12px;padding:6px 8px;border-bottom:1px solid var(--line);white-space:nowrap}
+.grid2{display:grid;grid-template-columns:minmax(0,1.3fr) minmax(0,1fr);gap:12px;align-items:start}
+.grid2.even{grid-template-columns:minmax(0,1fr) minmax(0,1fr)}
+.stack>*+*{margin-top:12px}
+
+table{width:100%;border-collapse:separate;border-spacing:0}
+th{text-align:left;font-weight:600;color:var(--mute);font-size:12px;padding:6px 8px;border-bottom:1px solid var(--line);white-space:nowrap;position:sticky;top:0;background:var(--card);z-index:1}
 td{padding:7px 8px;border-bottom:1px solid var(--line);vertical-align:top;overflow-wrap:anywhere}
 tr:last-child td{border-bottom:0}
-tbody tr.click{cursor:pointer}tbody tr.click:hover,tbody tr.sel{background:color-mix(in srgb,var(--accent) 9%,transparent)}
+th button{background:none;border:0;padding:0;font-weight:600;color:inherit;cursor:pointer}
+th button:hover{color:var(--ink)}
+th[aria-sort=ascending] button::after{content:" \25B2";font-size:9px}
+th[aria-sort=descending] button::after{content:" \25BC";font-size:9px}
+th[aria-sort] button{color:var(--ink)}
+tbody tr.click{cursor:pointer}
+tbody tr.click:hover,tbody tr.sel{background:var(--soft)}
+tbody tr.sel td:first-child{box-shadow:inset 3px 0 var(--accent)}
+tbody tr.click:focus-visible{outline-offset:-2px}
 .num{text-align:right;font-variant-numeric:tabular-nums;white-space:nowrap}
-.dot{display:inline-block;width:8px;height:8px;border-radius:50%;background:var(--line);margin-right:6px}
-.dot.on{background:var(--ok)}
+.nowrap{white-space:nowrap}
+.barcell{background:linear-gradient(to right,var(--soft) var(--p,0%),transparent var(--p,0%)) no-repeat}
+.sub{color:var(--mute);font-size:12px;padding-left:14px}
+.sub:empty,.only-s{display:none}
+.acts{margin:12px 0}
+.acts h3{font-size:12px;font-weight:600;color:var(--mute);margin:0 0 4px}
+.act-row{display:flex;gap:10px;align-items:baseline;padding:5px 8px;border-radius:6px}
+.act-row .what{flex:1;min-width:0}
+.act-row .svcs{color:var(--mute);font-size:12.5px}
+.act-row.bg .cat{color:var(--mute)}
+.act-row:not(.bg) .cat{font-weight:600}
+.svc{color:var(--mute);font-family:system-ui,-apple-system,Segoe UI,Roboto,sans-serif;font-size:12px;margin-left:8px;white-space:nowrap}
+a.ghost{display:inline-block;text-decoration:none;border:1px solid var(--line);border-radius:8px;padding:7px 12px;color:var(--ink);white-space:nowrap}
+a.ghost:hover{border-color:var(--mute)}
+.dot{display:inline-block;width:8px;height:8px;border-radius:50%;background:var(--line);margin-right:6px;flex:none}
+.dot.on{background:var(--ok)}.dot.bad{background:var(--bad)}
 .tag{display:inline-block;font-size:11px;padding:1px 7px;border-radius:99px;border:1px solid var(--line);color:var(--mute);margin-left:6px;white-space:nowrap}
 .tag.new{color:var(--warn);border-color:var(--warn)}
-input[type=text],input[type=search]{background:var(--card);color:var(--ink);border:1px solid var(--line);border-radius:8px;padding:7px 10px;font:inherit;width:100%;max-width:340px}
-button.act{background:var(--accent);color:#fff;border:0;border-radius:8px;padding:7px 12px;font:inherit;cursor:pointer}
-button.ghost{background:none;border:1px solid var(--line);color:var(--ink);border-radius:8px;padding:7px 12px;font:inherit;cursor:pointer}
+
+input[type=text],input[type=search]{background:var(--card);border:1px solid var(--line);border-radius:8px;padding:7px 10px;width:100%;max-width:340px;min-width:0;flex:1 1 180px}
+button.act{background:var(--accent);color:#fff;border:0;border-radius:8px;padding:7px 12px;cursor:pointer}
+@media(prefers-color-scheme:dark){button.act{color:#0f1216;font-weight:600}}
+button.ghost{background:none;border:1px solid var(--line);border-radius:8px;padding:7px 12px;cursor:pointer}
+button.ghost:hover{border-color:var(--mute)}
+button.link{background:none;border:0;padding:0;color:var(--accent);cursor:pointer;text-align:left}
+button.link:hover{text-decoration:underline}
 .row{display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:10px}
-.chart{display:flex;align-items:flex-end;gap:2px;height:90px;border-bottom:1px solid var(--line)}
-.chart i{flex:1;background:var(--bar);border-radius:2px 2px 0 0;min-height:1px}
+.chips{display:flex;gap:2px;flex-wrap:wrap}
+.chips button{padding:5px 10px}
+.chips .n{color:var(--mute);font-weight:400;margin-left:4px;font-variant-numeric:tabular-nums}
+.spacer{margin-left:auto}
+
+.readout{font-size:12px;color:var(--mute);min-height:18px;margin-bottom:4px;font-variant-numeric:tabular-nums}
+.chart{display:flex;align-items:flex-end;gap:2px;height:96px;border-bottom:1px solid var(--line);position:relative}
+.chart.dense{gap:0}
+.chart>div{flex:1;height:100%;display:flex;align-items:flex-end;min-width:0}
+.chart>div:hover{background:var(--soft)}
+.chart i{width:100%;background:var(--bar);border-radius:2px 2px 0 0}
+.chart>div:hover i{background:var(--accent)}
+.chart .none{position:absolute;inset:0;display:grid;place-items:center;color:var(--mute);pointer-events:none}
 .axis{display:flex;justify-content:space-between;font-size:11px;color:var(--mute);margin-top:4px}
+
+#detail{scroll-margin-top:70px}
+.dtitle{display:flex;align-items:flex-start;gap:8px}
+.dtitle h2{margin:0;font-size:16px;overflow-wrap:anywhere}
+.dtitle .x{margin-left:auto;background:none;border:0;color:var(--mute);font-size:20px;line-height:1;padding:0 4px;cursor:pointer;border-radius:6px}
+.dtitle .x:hover{color:var(--ink)}
+.dstate{display:flex;align-items:center;margin:2px 0 10px;color:var(--mute)}
+dl{display:grid;grid-template-columns:auto minmax(0,1fr);gap:3px 14px;margin:0 0 12px}
+dt{color:var(--mute)}dd{margin:0;overflow-wrap:anywhere}
+.note{border:1px solid var(--warn);color:var(--warn);border-radius:8px;padding:8px 10px;margin-bottom:10px;font-size:13px}
+.note.info{border-color:var(--line);color:var(--mute);background:var(--bg)}
 .empty{color:var(--mute);padding:14px 4px}
-.scroll{max-height:560px;overflow:auto}
+.scroll{overflow:auto;max-height:max(320px,calc(100vh - 290px))}
+#toast{position:fixed;left:50%;bottom:20px;transform:translateX(-50%);background:var(--ink);color:var(--bg);padding:8px 14px;border-radius:8px;opacity:0;pointer-events:none;transition:opacity .2s;z-index:10}
+#toast.show{opacity:1}
 [hidden]{display:none!important}
+
+@media(min-width:901px){
+  #detail{position:sticky;top:68px;max-height:calc(100vh - 84px);overflow:auto}
+}
+@media(max-width:900px){
+  .grid2,.grid2.even{grid-template-columns:minmax(0,1fr)}
+  .scroll{max-height:none}
+  #detail{scroll-margin-top:96px}
+  #status{margin-left:0;order:3;width:100%}
+  nav{margin-left:auto}
+}
+@media(max-width:640px){
+  .bar{padding:10px 16px}main{padding:12px 16px 40px}
+  .tiles{grid-template-columns:repeat(2,minmax(0,1fr));gap:8px}
+  .tile b{font-size:22px}
+  .hide-s{display:none}
+  .only-s{display:inline}
+}
+@media(prefers-reduced-motion:reduce){*{transition:none!important;scroll-behavior:auto!important}}
 </style>
 </head>
 <body>
-<header><h1>netinv</h1><span class="mute" id="status">loading…</span></header>
-<main>
-  <section class="tiles" id="tiles"></section>
-  <nav role="tablist">
-    <button role="tab" data-tab="devices" aria-selected="true">Devices</button>
-    <button role="tab" data-tab="domains" aria-selected="false">Domains</button>
-    <button role="tab" data-tab="live" aria-selected="false">Live</button>
+<header><div class="bar">
+  <h1>netinv</h1>
+  <nav role="tablist" aria-label="Views">
+    <button role="tab" id="t-devices" data-tab="devices" aria-controls="tab-devices" aria-selected="true">Devices</button>
+    <button role="tab" id="t-domains" data-tab="domains" aria-controls="tab-domains" aria-selected="false" tabindex="-1">Domains</button>
+    <button role="tab" id="t-live" data-tab="live" aria-controls="tab-live" aria-selected="false" tabindex="-1">Live</button>
   </nav>
+  <span class="mute" id="status" role="status"><span class="dot" id="sdot"></span><span id="stext">loading…</span></span>
+</div></header>
+<main>
+  <section class="tiles" id="tiles" aria-label="Summary"></section>
 
-  <section id="tab-devices" class="grid2">
+  <section id="tab-devices" role="tabpanel" aria-labelledby="t-devices" class="grid2">
     <div class="card">
-      <div class="row"><input type="search" id="devfilter" placeholder="Filter by name, IP, MAC, vendor" aria-label="Filter devices"></div>
-      <div class="scroll"><table><thead><tr><th>Device</th><th>IP</th><th>MAC / vendor</th><th class="num">Lookups 24h</th><th class="num">Last seen</th></tr></thead><tbody id="devrows"></tbody></table></div>
+      <div class="row">
+        <input type="search" id="devfilter" placeholder="Filter by name, IP, MAC, vendor" aria-label="Filter devices">
+        <div class="chips" id="chips" role="group" aria-label="Show">
+          <button data-f="all" aria-pressed="true">All<span class="n"></span></button>
+          <button data-f="online" aria-pressed="false">Online<span class="n"></span></button>
+          <button data-f="new" aria-pressed="false">New<span class="n"></span></button>
+          <button data-f="silent" aria-pressed="false" title="Online but no DNS lookups in 24h: may be bypassing the Pi's DNS">No lookups<span class="n"></span></button>
+        </div>
+        <a class="ghost spacer" href="/api/devices.csv" download title="Download the full device list as a spreadsheet">Export CSV</a>
+      </div>
+      <div class="scroll"><table>
+        <thead><tr>
+          <th data-sort="name"><button>Device</button></th>
+          <th data-sort="ip" class="hide-s"><button>IP</button></th>
+          <th data-sort="mostly"><button title="What its lookups in the last 24h were mainly for, ignoring background chatter">Mostly, 24h</button></th>
+          <th data-sort="queries" class="num hide-s"><button>Lookups 24h</button></th>
+          <th data-sort="seen" class="num"><button>Last seen</button></th>
+        </tr></thead>
+        <tbody id="devrows"></tbody>
+      </table></div>
     </div>
-    <div class="card" id="detail"><div class="empty">Select a device to see what it has been looking up.</div></div>
+    <div class="card" id="detail">
+      <div class="empty" id="dempty">Select a device to see what it has been looking up.</div>
+      <div id="dbody" hidden><div id="dhead"></div><div class="row" id="dseg"></div><div id="dact"></div></div>
+    </div>
   </section>
 
-  <section id="tab-domains" hidden>
-    <div class="card" style="margin-bottom:12px">
+  <section id="tab-domains" role="tabpanel" aria-labelledby="t-domains" class="stack" hidden>
+    <div class="card">
       <h2>Lookups per hour, last 24h</h2>
       <div id="netchart"></div>
     </div>
-    <div class="grid2">
+    <div class="card">
+      <h2>What the network is doing, last 24h</h2>
+      <div id="netacts"></div>
+    </div>
+    <div class="grid2 even">
       <div class="card"><h2>Top domains, last 24h</h2><div id="top"></div></div>
       <div class="card"><h2>First seen in the last 24h</h2><div id="fresh"></div></div>
     </div>
-    <div class="card" style="margin-top:12px">
+    <div class="card" id="domcard">
       <h2>Which devices looked up…</h2>
-      <div class="row"><input type="search" id="domq" placeholder="e.g. tiktok, amazonaws.com" aria-label="Search domains"><button class="act" id="domgo">Search</button></div>
-      <div id="domres"></div>
+      <form class="row" id="domform" role="search"><input type="search" id="domq" placeholder="e.g. tiktok, amazonaws.com" aria-label="Search domains"><button class="act">Search</button></form>
+      <div id="domres"><div class="empty">Search for part of a domain, or click one in the tables above.</div></div>
     </div>
   </section>
 
-  <section id="tab-live" hidden>
-    <div class="card"><h2>Most recent lookups</h2><div class="scroll" id="live"></div></div>
+  <section id="tab-live" role="tabpanel" aria-labelledby="t-live" hidden>
+    <div class="card">
+      <div class="row">
+        <h2 style="margin:0">Most recent lookups</h2>
+        <span class="mute" id="livecount"></span>
+        <input type="search" id="livefilter" class="spacer" placeholder="Filter by device or domain" aria-label="Filter live lookups">
+        <button class="ghost" id="livepause" aria-pressed="false">Pause</button>
+      </div>
+      <div class="scroll" id="live"></div>
+    </div>
   </section>
 </main>
+<div id="toast" role="status" aria-live="polite"></div>
 <script>
 "use strict";
 const $ = s => document.querySelector(s);
@@ -89,12 +210,13 @@ const $ = s => document.querySelector(s);
 function el(tag, attrs, ...kids){
   const e = document.createElement(tag);
   for (const [k,v] of Object.entries(attrs||{})) {
+    if (v == null || v === false) continue;
     if (k === "class") e.className = v; else if (k.startsWith("on")) e.addEventListener(k.slice(2), v); else e.setAttribute(k, v);
   }
-  for (const k of kids.flat()) if (k != null) e.append(k.nodeType ? k : document.createTextNode(String(k)));
+  for (const k of kids.flat(Infinity)) if (k != null && k !== false) e.append(k.nodeType ? k : document.createTextNode(String(k)));
   return e;
 }
-const api = (p) => fetch(p).then(r => r.json());
+const api = p => fetch(p).then(r => { if (!r.ok) throw new Error(r.status); return r.json(); });
 const fmt = n => Number(n).toLocaleString();
 function ago(ts){
   if (!ts) return "never";
@@ -105,123 +227,326 @@ function ago(ts){
   return Math.round(s/86400) + "d ago";
 }
 const hourLabel = ts => new Date(ts*1000).toLocaleString([], {month:"short", day:"numeric", hour:"numeric"});
-const devName = d => d.label || d.hostname || d.vendor || d.mac;
-
-function table(heads, rows){
-  if (!rows.length) return el("div", {class:"empty"}, "Nothing yet.");
+// A label or hostname is a real name. Failing that, the server's guess from the device's lookups, then the vendor.
+const devName = d => d.label || d.hostname || d.hint || d.vendor || "Unknown device";
+const isGuess = d => !d.label && !d.hostname && !!d.hint;
+const isUnnamed = d => !d.label && !d.hostname;
+const GUESS_TIP = "Guessed from the domains this device looks up. Give it a label once you know what it is.";
+const isReal = d => !d.mac.startsWith("ip:");
+const isSilent = d => isReal(d) && d.online && !d.queries;
+const narrow = () => matchMedia("(max-width:900px)").matches;
+let toastTimer;
+function toast(msg){
+  const t = $("#toast"); t.textContent = msg; t.classList.add("show");
+  clearTimeout(toastTimer); toastTimer = setTimeout(() => t.classList.remove("show"), 1800);
+}
+// A table row that acts like a button: mouse, Enter and Space.
+function clickRow(fn, attrs, ...cells){
+  const tr = el("tr", {...attrs, class:"click " + (attrs.class || ""), tabindex:0}, cells);
+  tr.addEventListener("click", fn);
+  tr.addEventListener("keydown", e => { if (e.target === tr && (e.key === "Enter" || e.key === " ")) { e.preventDefault(); fn(); } });
+  return tr;
+}
+function table(heads, rows, empty){
+  if (!rows.length) return el("div", {class:"empty"}, empty || "Nothing yet.");
   return el("table", {}, el("thead", {}, el("tr", {}, heads.map(h => el("th", {class: h.num ? "num" : ""}, h.t)))), el("tbody", {}, rows));
 }
+const share = (c, max) => `--p:${Math.round(c / Math.max(1, max) * 100)}%`;
+const domCell = (r, max) => el("td", {class:"mono" + (max ? " barcell" : ""), style: max ? share(r.c, max) : null}, r.name, r.svc ? el("span", {class:"svc"}, r.svc) : null);
+// Lookups rolled up into plain-English categories. What people did first, background chatter after.
+function activityList(acts){
+  const total = acts.reduce((a, c) => a + c.c, 0);
+  if (!total) return null;
+  const pct = c => { const p = c / total * 100; return p < 1 ? "<1%" : Math.round(p) + "%"; };
+  const row = a => el("div", {class:"act-row barcell" + (a.background ? " bg" : ""), style:share(a.c, total), title:fmt(a.c) + " lookups"},
+    el("div", {class:"what"}, el("span", {class:"cat"}, a.cat === "Other" ? "Other sites" : a.cat), a.services.length ? el("span", {class:"svcs"}, " · " + a.services.join(", ")) : null),
+    el("div", {class:"num"}, pct(a.c)));
+  const fg = acts.filter(a => !a.background), bg = acts.filter(a => a.background);
+  return el("div", {class:"acts"},
+    fg.length ? [el("h3", {}, "Activity, by share of lookups"), fg.map(row)] : null,
+    bg.length ? [el("h3", {style: fg.length ? "margin-top:8px" : null}, fg.length ? "Background and uncategorized" : "Only background and uncategorized lookups"), bg.map(row)] : null);
+}
+
 function chart(points, hours){
-  // fill gaps so quiet hours show as empty slots
-  const now = Math.floor(Date.now()/1000), end = now - now % 3600, by = new Map(points.map(p => [p.hour, p.c]));
-  const n = Math.min(hours, 24*14), step = Math.ceil(hours / n) * 3600, bars = [];
-  for (let t = end - (n-1)*step; t <= end; t += step){
+  // One bar per hour up to 14 days, then wider buckets. Gaps are filled so quiet hours show as empty slots.
+  const now = Math.floor(Date.now()/1000), end = now - now % 3600 + 3600, by = new Map(points.map(p => [p.hour, p.c]));
+  const stepH = Math.ceil(hours / 336), step = stepH * 3600, n = Math.ceil(hours / stepH), bars = [];
+  for (let t = end - n*step; t < end; t += step){
     let c = 0; for (let h = t; h < t + step; h += 3600) c += by.get(h) || 0;
     bars.push({t, c});
   }
-  const max = Math.max(1, ...bars.map(b => b.c));
-  return el("div", {},
-    el("div", {class:"chart", role:"img", "aria-label":"Lookups over time, peak " + fmt(max)},
-      bars.map(b => el("i", {style:`height:${b.c/max*100}%`, title:`${hourLabel(b.t)}: ${fmt(b.c)} lookups`}))),
-    el("div", {class:"axis"}, el("span", {}, hourLabel(bars[0].t)), el("span", {}, "peak " + fmt(max) + (step > 3600 ? ` per ${step/3600}h` : "/h")), el("span", {}, "now")));
+  const max = Math.max(1, ...bars.map(b => b.c)), total = bars.reduce((a, b) => a + b.c, 0);
+  const per = stepH > 1 ? ` per ${stepH}h` : "/h";
+  const idle = `${fmt(total)} lookups · peak ${fmt(max)}${per}`;
+  const readout = el("div", {class:"readout"}, idle);
+  const box = el("div", {class:"chart" + (n > 100 ? " dense" : ""), role:"img", "aria-label":`Lookups over time: ${idle}`},
+    bars.map(b => el("div", {onmouseenter:() => readout.textContent = `${hourLabel(b.t)}${stepH > 1 ? ` (+${stepH}h)` : ""}: ${fmt(b.c)} lookups`},
+      el("i", {style:`height:${b.c ? `max(2px,${b.c/max*100}%)` : "0"}`}))),
+    total ? null : el("div", {class:"none"}, "No lookups in this period"));
+  box.addEventListener("mouseleave", () => readout.textContent = idle);
+  return el("div", {}, readout, box, el("div", {class:"axis"}, el("span", {}, hourLabel(bars[0].t)), el("span", {}, "now")));
 }
 
-let devices = [], selected = null, range = 24, group = "base";
+let devices = [], selected = null, range = 24, group = "base", tab = "devices";
+let filter = "all", sort = {key:null, dir:1}, liveRows = [], livePaused = false, labelInput = null;
+
+// ---- summary ---------------------------------------------------------------
+const TILES = [
+  ["total", "devices seen", () => showDevices("all")],
+  ["online", "online now", () => showDevices("online")],
+  ["unknown", "not yet reviewed", () => showDevices("new")],
+  ["queries", "DNS lookups, 24h", () => setTab("domains")],
+  ["domains", "distinct domains, 24h", () => setTab("domains")],
+];
+$("#tiles").append(...TILES.map(([k, label, go]) => el("button", {class:"card tile", id:"tile-" + k, onclick:go}, el("b", {}, "–"), el("span", {}, label))));
+function showDevices(f){ filter = f; $("#devfilter").value = ""; setTab("devices"); renderDevices(); }
 
 async function loadSummary(){
   const s = await api("/api/summary");
-  $("#status").textContent = s.last_scan ? "last scan " + ago(s.last_scan) : "waiting for first scan";
-  const tile = (n, label, alert) => el("div", {class:"card tile" + (alert ? " alert" : "")}, el("b", {}, fmt(n)), el("span", {class:"mute"}, label));
-  $("#tiles").replaceChildren(
-    tile(s.total, "devices seen"), tile(s.online, "online now"),
-    tile(s.unknown, "not yet reviewed", s.unknown > 0),
-    tile(s.queries, "DNS lookups, 24h"), tile(s.domains, "distinct domains, 24h"));
+  $("#sdot").className = "dot on"; $("#status").classList.remove("bad");
+  $("#stext").textContent = s.last_scan ? "last scan " + ago(s.last_scan) : "waiting for first scan";
+  for (const [k] of TILES) $("#tile-" + k + " b").textContent = fmt(s[k]);
+  $("#tile-unknown").classList.toggle("alert", s.unknown > 0);
+  if (tab !== "domains") return;
   $("#netchart").replaceChildren(chart(s.hourly, 24));
+  $("#netacts").replaceChildren(activityList(s.activity) || el("div", {class:"empty"}, "No lookups logged in the last 24h."));
+  const maxTop = Math.max(1, ...s.top.map(r => r.c));
   $("#top").replaceChildren(table([{t:"Domain"},{t:"Devices",num:1},{t:"Lookups",num:1}],
-    s.top.map(r => el("tr", {class:"click", onclick:() => searchDomain(r.name)}, el("td", {class:"mono"}, r.name), el("td", {class:"num"}, r.devs), el("td", {class:"num"}, fmt(r.c))))));
+    s.top.map(r => clickRow(() => searchDomain(r.name), {}, domCell(r, maxTop), el("td", {class:"num"}, r.devs), el("td", {class:"num"}, fmt(r.c)))),
+    "No lookups logged in the last 24h."));
   $("#fresh").replaceChildren(table([{t:"Domain"},{t:"Devices",num:1},{t:"First seen",num:1}],
-    s.fresh.map(r => el("tr", {class:"click", onclick:() => searchDomain(r.name)}, el("td", {class:"mono"}, r.name), el("td", {class:"num"}, r.devs), el("td", {class:"num"}, hourLabel(r.first))))));
+    s.fresh.map(r => clickRow(() => searchDomain(r.name), {}, domCell(r), el("td", {class:"num"}, r.devs), el("td", {class:"num"}, hourLabel(r.first)))),
+    "No new domains in the last 24h."));
 }
 
+// ---- devices ---------------------------------------------------------------
+const FILTERS = {all:() => true, online:d => d.online, new:d => !d.known, silent:isSilent};
+const ipNum = ip => ip && /^\d+(\.\d+){3}$/.test(ip) ? ip.split(".").reduce((a, o) => a*256 + +o, 0) : Infinity;
+const SORTS = {
+  name:[d => devName(d).toLowerCase(), 1], ip:[d => ipNum(d.ip), 1], mostly:[d => (d.mostly || "￿").toLowerCase(), 1],
+  queries:[d => d.queries, -1], seen:[d => d.last_seen || 0, -1],
+};
 async function loadDevices(){
   devices = await api("/api/devices");
   renderDevices();
 }
 function renderDevices(){
   const f = $("#devfilter").value.trim().toLowerCase();
-  const rows = devices.filter(d => !f || [d.label,d.hostname,d.vendor,d.mac,d.ip].join(" ").toLowerCase().includes(f)).map(d =>
-    el("tr", {class:"click" + (d.mac === selected ? " sel" : ""), onclick:() => select(d.mac)},
-      el("td", {}, el("span", {class:"dot" + (d.online ? " on" : ""), title: d.online ? "online" : "offline"}), devName(d),
-        d.known ? null : el("span", {class:"tag new"}, "new"), d.randomized ? el("span", {class:"tag", title:"Locally administered (private/randomized) MAC address"}, "private MAC") : null),
-      el("td", {class:"mono", style:"white-space:nowrap"}, d.ip || ""),
-      el("td", {}, el("div", {class:"mono"}, d.mac.startsWith("ip:") ? "MAC not seen" : d.mac), el("div", {class:"mute"}, d.vendor || "")),
-      el("td", {class:"num"}, fmt(d.queries)),
+  for (const b of document.querySelectorAll("#chips button")) {
+    b.setAttribute("aria-pressed", String(b.dataset.f === filter));
+    b.querySelector(".n").textContent = devices.filter(FILTERS[b.dataset.f]).length;
+  }
+  for (const th of document.querySelectorAll("th[data-sort]")) {
+    if (th.dataset.sort === sort.key) th.setAttribute("aria-sort", sort.dir > 0 ? "ascending" : "descending"); else th.removeAttribute("aria-sort");
+  }
+  let list = devices.filter(FILTERS[filter]).filter(d => !f || [d.label,d.hostname,d.hint,d.vendor,d.mac,d.ip,d.mostly].join(" ").toLowerCase().includes(f));
+  if (sort.key) {
+    const get = SORTS[sort.key][0];
+    list = list.slice().sort((a, b) => { const x = get(a), y = get(b); return (x < y ? -1 : x > y ? 1 : 0) * sort.dir; });
+  }
+  const focused = document.activeElement && document.activeElement.dataset ? document.activeElement.dataset.mac : null;
+  const rows = list.map(d =>
+    clickRow(() => select(d.mac), {class: d.mac === selected ? "sel" : "", "data-mac":d.mac, "aria-selected": d.mac === selected ? "true" : null},
+      el("td", {}, el("span", {class:"dot" + (d.online ? " on" : ""), role:"img", "aria-label": d.online ? "online" : "offline", title: d.online ? "online" : "offline"}), devName(d),
+        isGuess(d) ? el("span", {class:"tag", title:GUESS_TIP}, "guess") : null,
+        d.known ? null : el("span", {class:"tag new"}, "new"),
+        d.randomized ? el("span", {class:"tag", title:"Locally administered (private/randomized) MAC address"}, "private MAC") : null,
+        isSilent(d) ? el("span", {class:"tag", title:"Online but no DNS lookups in 24h: may be bypassing the Pi's DNS"}, "no lookups") : null,
+        d.hidden ? el("span", {class:"tag", title:"Uses a VPN, iCloud Private Relay or encrypted DNS: part of what it does is not visible here"}, "partly hidden") : null,
+        (sub => el("div", {class:"sub"}, d.ip ? el("span", {class:"only-s"}, d.ip + (sub ? " · " : "")) : null, sub))(d.vendor || (isReal(d) ? "" : "MAC not seen"))),
+      el("td", {class:"mono nowrap hide-s"}, d.ip || ""),
+      el("td", {class: d.mostly ? "" : "mute"}, d.mostly || (d.queries ? "" : "–")),
+      el("td", {class:"num hide-s"}, fmt(d.queries)),
       el("td", {class:"num"}, ago(d.last_seen))));
-  $("#devrows").replaceChildren(...(rows.length ? rows : [el("tr", {}, el("td", {colspan:5, class:"empty"}, devices.length ? "No match." : "No devices yet. The first scan runs at startup."))]));
+  const none = !devices.length ? "No devices yet. The first scan runs at startup." : "No devices match.";
+  $("#devrows").replaceChildren(...(rows.length ? rows : [el("tr", {}, el("td", {colspan:5, class:"empty"}, none,
+    devices.length && (f || filter !== "all") ? [" ", el("button", {class:"link", onclick:() => showDevices("all")}, "Show all")] : null))]));
+  if (focused) { const r = rows.find(r => r.dataset.mac === focused); if (r) r.focus(); }
 }
-async function update(mac, patch){
-  await fetch("/api/device", {method:"POST", headers:{"Content-Type":"application/json"}, body:JSON.stringify({mac, ...patch})});
+for (const b of document.querySelectorAll("#chips button")) b.addEventListener("click", () => { filter = b.dataset.f; renderDevices(); });
+for (const th of document.querySelectorAll("th[data-sort]")) th.querySelector("button").addEventListener("click", () => {
+  // first click: natural direction, second: reversed, third: back to the default order
+  const k = th.dataset.sort, d0 = SORTS[k][1];
+  sort = sort.key !== k ? {key:k, dir:d0} : sort.dir === d0 ? {key:k, dir:-d0} : {key:null, dir:1};
+  renderDevices();
+});
+
+async function update(mac, patch, msg){
+  try {
+    const r = await fetch("/api/device", {method:"POST", headers:{"Content-Type":"application/json"}, body:JSON.stringify({mac, ...patch})});
+    if (!r.ok) throw new Error(r.status);
+  } catch (e) { toast("Could not save"); return; }
+  labelInput = null;
   await Promise.all([loadDevices(), loadSummary()]);
-  renderDetail();
+  await renderDetail();
+  toast(msg);
 }
-function select(mac){ selected = mac; renderDevices(); renderDetail(); }
-async function renderDetail(){
+function select(mac, scroll = true){
+  selected = mac; syncHash(); renderDevices(); renderDetail();
+  if (mac && scroll && narrow()) $("#detail").scrollIntoView({behavior:"smooth", block:"start"});
+}
+function deselect(){
+  const mac = selected; selected = null; labelInput = null; syncHash();
+  $("#dbody").hidden = true; $("#dempty").hidden = false;
+  renderDevices();
+  const r = [...$("#devrows").children].find(r => r.dataset.mac === mac);
+  if (r) { r.focus(); if (narrow()) r.scrollIntoView({block:"center"}); }
+}
+function detailHead(d){
+  const real = isReal(d);
+  // Naming a device is reviewing it: one step instead of two.
+  const save = () => { const label = labelInput.value.trim(); update(d.mac, label ? {label, known:true} : {label}, label ? "Label saved" : "Label cleared"); };
+  const todo = devices.filter(x => !x.known && x.mac !== d.mac);
+  labelInput = el("input", {type:"text", value:d.label || "", maxlength:80, placeholder:"Label, e.g. Living room TV", "aria-label":"Device label",
+    onkeydown:e => { if (e.key === "Enter") save(); }});
+  const row = (k, v, mono) => v ? [el("dt", {}, k), el("dd", {class: mono ? "mono" : ""}, v)] : null;
+  return [
+    el("div", {class:"dtitle"}, el("h2", {}, devName(d)),
+      d.known ? null : el("span", {class:"tag new"}, "new"),
+      el("button", {class:"x", "aria-label":"Close device details", title:"Close", onclick:deselect}, "×")),
+    el("div", {class:"dstate"}, el("span", {class:"dot" + (d.online ? " on" : "")}), d.online ? "Online now" : "Last seen " + ago(d.last_seen)),
+    el("dl", {}, row("IP", d.ip, 1), row("IPv6", d.ip6, 1), row("MAC", real ? d.mac + (d.randomized ? " (private)" : "") : null, 1),
+      row("Hostname", d.hostname), row("Vendor", d.vendor), row("Looks like", d.hint),
+      row("First seen", real && d.first_seen ? new Date(d.first_seen*1000).toLocaleDateString() : null)),
+    real && isUnnamed(d) ? el("div", {class:"note info"}, "This device has not reported a name. ",
+      d.hint ? `Its lookups suggest: ${d.hint}. ` : "The domains below are the best clue to what it is. ",
+      d.randomized ? "It uses a private MAC, which is typical of phones, tablets and laptops; the address above is shown in that device's Wi-Fi settings for this network. "
+                   : "The MAC address above is usually printed on the device or shown in its network settings. ",
+      "Once you know what it is, give it a label.") : null,
+    real ? el("div", {class:"row"}, labelInput,
+      el("button", {class:"act", onclick:save}, "Save"),
+      el("button", {class:"ghost", onclick:() => update(d.mac, {known: !d.known}, d.known ? "Marked as not reviewed" : "Marked as reviewed")}, d.known ? "Mark as not reviewed" : "Mark as reviewed"),
+      todo.length ? el("button", {class:"ghost", title:"Open the next device you have not reviewed", onclick:() => select(todo[0].mac, false)}, `Next to review (${todo.length}) →`) : null) : null,
+    isSilent(d) ? el("div", {class:"note"}, "Online, but no lookups in the last 24h. It may use encrypted or hard-coded DNS and bypass the Pi.") : null,
+  ];
+}
+// refresh=true is the background tick: leave anything the user is interacting with alone.
+async function renderDetail(refresh){
   const d = devices.find(x => x.mac === selected);
   if (!d) return;
-  const data = await api(`/api/device?mac=${encodeURIComponent(d.mac)}&hours=${range}&group=${group}`);
+  let data;
+  try { data = await api(`/api/device?mac=${encodeURIComponent(d.mac)}&hours=${range}&group=${group}`); } catch (e) { return; }
   if (selected !== d.mac) return;
-  const real = !d.mac.startsWith("ip:");
-  const name = el("input", {type:"text", value:d.label || "", placeholder:"Label, e.g. Living room TV", "aria-label":"Device label"});
-  const seg = (opts, cur, set) => el("span", {class:"seg"}, opts.map(([v,t]) => el("button", {"aria-pressed": String(v === cur), onclick:() => { set(v); renderDetail(); }}, t)));
-  $("#detail").replaceChildren(
-    el("h2", {}, devName(d)),
-    el("div", {class:"mute", style:"margin-bottom:10px"}, [d.ip, real ? d.mac : null, d.hostname, d.vendor].filter(Boolean).join(" · "),
-      real ? ` · first seen ${new Date(d.first_seen*1000).toLocaleDateString()}` : ""),
-    real ? el("div", {class:"row"}, name,
-      el("button", {class:"act", onclick:() => update(d.mac, {label:name.value})}, "Save"),
-      el("button", {class:"ghost", onclick:() => update(d.mac, {known: !d.known})}, d.known ? "Mark as not reviewed" : "Mark as reviewed")) : null,
-    el("div", {class:"row"}, seg([[24,"24h"],[168,"7d"],[720,"30d"]], range, v => range = v), seg([["base","By site"],["domain","Full hostnames"]], group, v => group = v)),
-    chart(data.hourly, range),
-    el("div", {class:"scroll", style:"margin-top:12px;max-height:380px"}, table([{t:"Domain"},{t:"Lookups",num:1},{t:"Last",num:1}],
-      data.top.map(r => el("tr", {}, el("td", {class:"mono"}, r.name), el("td", {class:"num"}, fmt(r.c)), el("td", {class:"num"}, ago(Math.min(r.last + 3599, Date.now()/1000))))))));
+  const head = $("#dhead"), segs = $("#dseg");
+  const busy = refresh && labelInput && labelInput.isConnected && (head.contains(document.activeElement) || labelInput.value !== (d.label || ""));
+  if (!busy) head.replaceChildren(...detailHead(d).filter(Boolean));
+  if (!refresh || !segs.contains(document.activeElement)) {
+    const seg = (label, opts, cur, set) => el("span", {class:"seg", role:"group", "aria-label":label}, opts.map(([v,t]) =>
+      el("button", {"aria-pressed": String(v === cur), "data-v":v, onclick:async () => { set(v); await renderDetail(); const b = segs.querySelector(`[data-v="${v}"]`); if (b) b.focus(); }}, t)));
+    segs.replaceChildren(seg("Period", [[24,"24h"],[168,"7d"],[720,"30d"]], range, v => range = v),
+      seg("Grouping", [["base","By site"],["domain","Full hostnames"]], group, v => group = v));
+  }
+  const max = Math.max(1, ...data.top.map(r => r.c));
+  $("#dact").replaceChildren(...[chart(data.hourly, range),
+    data.activity.some(a => a.cat === "VPN & encrypted DNS") ? el("div", {class:"note", style:"margin-top:12px"},
+      "This device uses a VPN, iCloud Private Relay or encrypted DNS, so part of what it does is not visible here.") : null,
+    activityList(data.activity),
+    el("div", {style:"margin-top:12px"}, table([{t:"Domain"},{t:"Lookups",num:1},{t:"Last",num:1}],
+      data.top.map(r => el("tr", {}, domCell(r, max), el("td", {class:"num"}, fmt(r.c)), el("td", {class:"num"}, ago(Math.min(r.last + 3599, Date.now()/1000))))),
+      "No lookups from this device in this period."))].filter(Boolean));
+  $("#dempty").hidden = true; $("#dbody").hidden = false;
 }
 
+// ---- domains ---------------------------------------------------------------
 async function searchDomain(q){
-  if (q) { $("#domq").value = q; }
+  if (q) $("#domq").value = q;
   const term = $("#domq").value.trim();
-  if (term.length < 2) return;
-  const rows = await api("/api/domain?q=" + encodeURIComponent(term));
-  $("#domres").replaceChildren(table([{t:"Domain"},{t:"Device"},{t:"Lookups",num:1},{t:"First",num:1},{t:"Last",num:1}],
-    rows.map(r => el("tr", {}, el("td", {class:"mono"}, r.domain), el("td", {}, r.label || r.hostname || r.vendor || r.dev),
-      el("td", {class:"num"}, fmt(r.c)), el("td", {class:"num"}, hourLabel(r.first)), el("td", {class:"num"}, hourLabel(r.last))))));
-  $("#domres").scrollIntoView({block:"nearest"});
+  if (term.length < 2) { $("#domres").replaceChildren(el("div", {class:"empty"}, "Type at least 2 characters.")); return; }
+  let rows;
+  try { rows = await api("/api/domain?q=" + encodeURIComponent(term)); } catch (e) { toast("Search failed"); return; }
+  const known = new Map(devices.map(d => [d.mac, d]));
+  $("#domres").replaceChildren(
+    rows.length ? el("div", {class:"mute", style:"margin-bottom:6px"}, rows.length >= 200 ? "Showing the 200 most recent matches" : `${rows.length} match${rows.length === 1 ? "" : "es"}`) : null,
+    table([{t:"Domain"},{t:"Device"},{t:"Lookups",num:1},{t:"First",num:1},{t:"Last",num:1}],
+      rows.map(r => { const d = known.get(r.dev), name = d && isReal(d) ? devName(d) + (isUnnamed(d) && d.ip ? ` (${d.ip})` : "") : r.dev.replace(/^ip:/, "");
+        return el("tr", {}, el("td", {class:"mono"}, r.domain),
+          el("td", {}, known.has(r.dev) ? el("button", {class:"link", title:"Show this device", onclick:() => openDevice(r.dev)}, name) : name),
+          el("td", {class:"num"}, fmt(r.c)), el("td", {class:"num"}, hourLabel(r.first)), el("td", {class:"num"}, hourLabel(r.last))); }),
+      `No device has looked up anything matching “${term}”.`));
+  $("#domcard").scrollIntoView({behavior:"smooth", block:"nearest"});
 }
-async function loadLive(){
-  const rows = await api("/api/live");
-  $("#live").replaceChildren(table([{t:"Time"},{t:"Device"},{t:"Type"},{t:"Domain"}],
-    rows.map(r => el("tr", {}, el("td", {class:"mono"}, new Date(r.ts*1000).toLocaleTimeString()), el("td", {}, r.name), el("td", {class:"mono"}, r.type), el("td", {class:"mono"}, r.domain)))));
+function openDevice(mac){
+  filter = "all"; sort = {key:null, dir:1}; $("#devfilter").value = "";
+  setTab("devices"); select(mac);
+  const r = [...$("#devrows").children].find(r => r.dataset.mac === mac);
+  if (r && !narrow()) r.scrollIntoView({block:"nearest"});
 }
+$("#domform").addEventListener("submit", e => { e.preventDefault(); searchDomain(); });
 
-let tab = "devices";
-document.querySelectorAll("nav button").forEach(b => b.addEventListener("click", () => {
-  tab = b.dataset.tab;
-  document.querySelectorAll("nav button").forEach(x => x.setAttribute("aria-selected", String(x === b)));
-  for (const t of ["devices","domains","live"]) $("#tab-" + t).hidden = t !== tab;
-  refresh();
-}));
+// ---- live ------------------------------------------------------------------
+async function loadLive(){
+  liveRows = await api("/api/live");
+  renderLive();
+}
+function renderLive(){
+  const f = $("#livefilter").value.trim().toLowerCase();
+  const known = new Set(devices.map(d => d.mac));
+  const rows = liveRows.filter(r => !f || (r.name + " " + r.domain + " " + r.ip).toLowerCase().includes(f));
+  $("#livecount").textContent = (f ? `${rows.length} of ${liveRows.length}` : `${liveRows.length}`) + (livePaused ? " · paused" : " · updating");
+  $("#live").replaceChildren(table([{t:"Time"},{t:"Device"},{t:"Type"},{t:"Domain"}],
+    rows.map(r => el("tr", {}, el("td", {class:"mono nowrap"}, new Date(r.ts*1000).toLocaleTimeString()),
+      el("td", {}, known.has(r.dev) ? el("button", {class:"link", title:"Show this device", onclick:() => openDevice(r.dev)}, r.name) : r.name),
+      el("td", {class:"mono"}, r.type), el("td", {class:"mono"}, r.domain))),
+    liveRows.length ? "No lookups match." : "No lookups since netinv started."));
+}
+$("#livefilter").addEventListener("input", renderLive);
+$("#livepause").addEventListener("click", e => {
+  livePaused = !livePaused;
+  e.currentTarget.textContent = livePaused ? "Resume" : "Pause";
+  e.currentTarget.setAttribute("aria-pressed", String(livePaused));
+  if (livePaused) renderLive(); else loadLive().catch(() => {});
+});
+
+// ---- tabs and refresh ------------------------------------------------------
+const TABS = ["devices", "domains", "live"];
+function setTab(t){
+  if (!TABS.includes(t)) t = "devices";
+  const changed = t !== tab; tab = t;
+  for (const b of document.querySelectorAll("nav button")) {
+    const on = b.dataset.tab === t;
+    b.setAttribute("aria-selected", String(on)); b.tabIndex = on ? 0 : -1;
+  }
+  for (const x of TABS) $("#tab-" + x).hidden = x !== t;
+  syncHash();
+  if (changed) { scrollTo(0, 0); refresh(); }
+}
+// #devices/<mac> keeps the open device across reloads and makes it bookmarkable.
+function syncHash(){
+  const h = "#" + tab + (tab === "devices" && selected ? "/" + selected : "");
+  if (location.hash !== h) history.replaceState(null, "", h);
+}
+function readHash(){
+  const [t, ...rest] = decodeURIComponent(location.hash.slice(1)).split("/");
+  return {t: TABS.includes(t) ? t : "devices", mac: rest.join("/") || null};
+}
+for (const b of document.querySelectorAll("nav button")) {
+  b.addEventListener("click", () => setTab(b.dataset.tab));
+  b.addEventListener("keydown", e => {
+    const d = e.key === "ArrowRight" ? 1 : e.key === "ArrowLeft" ? -1 : 0;
+    if (!d) return;
+    const next = TABS[(TABS.indexOf(tab) + d + TABS.length) % TABS.length];
+    setTab(next); $("#t-" + next).focus();
+  });
+}
+addEventListener("hashchange", () => { const h = readHash(); setTab(h.t); if (h.t === "devices" && h.mac && h.mac !== selected) select(h.mac, false); });
 $("#devfilter").addEventListener("input", renderDevices);
-$("#domgo").addEventListener("click", () => searchDomain());
-$("#domq").addEventListener("keydown", e => { if (e.key === "Enter") searchDomain(); });
 
 async function refresh(){
   try {
-    await loadSummary();
-    if (tab === "devices") await loadDevices();
-    if (tab === "live") await loadLive();
-  } catch (e) { $("#status").textContent = "cannot reach netinv"; }
+    // devices are needed on every tab: other views link back to them
+    await Promise.all([loadSummary(), loadDevices()]);
+    if (tab === "devices" && selected) await renderDetail(true);
+    if (tab === "live" && !livePaused) await loadLive();
+  } catch (e) {
+    $("#sdot").className = "dot bad"; $("#status").classList.add("bad");
+    $("#stext").textContent = "cannot reach netinv, retrying";
+  }
 }
-refresh();
-setInterval(refresh, 15000);
+{ const h = readHash(); selected = h.t === "devices" ? h.mac : null; tab = h.t; setTab(h.t); }
+refresh().then(() => { if (selected && !devices.some(d => d.mac === selected)) { selected = null; syncHash(); } });
+setInterval(() => { if (!document.hidden) refresh(); }, 15000);
+setInterval(() => { if (!document.hidden && tab === "live" && !livePaused) loadLive().catch(() => {}); }, 3000);
+document.addEventListener("visibilitychange", () => { if (!document.hidden) refresh(); });
 </script>
 </body>
 </html>
