@@ -4,6 +4,12 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>netinv</title>
+<link rel="manifest" href="/manifest.json">
+<link rel="icon" href="/icon.svg" type="image/svg+xml">
+<link rel="apple-touch-icon" href="/icon.svg">
+<meta name="theme-color" content="#090c13">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="netinv">
 <script>try{if(localStorage.getItem("netinv-theme")==="light")document.documentElement.dataset.theme="light"}catch(e){}</script>
 <style>
 :root{color-scheme:dark;--bg:#090c13;--card:#111725;--ink:#e8ecf3;--mute:#8d99ab;--line:#222b3c;--accent:#4cc9f0;--accent2:#8b7cf6;--soft:#4cc9f01f;--ok:#34d399;--warn:#fbbf24;--warnbg:#fbbf2414;--bad:#f87171;--bar:#4cc9f0;--on-accent:#06121a;--lift:0 0 0 1px #4cc9f012,0 18px 40px -24px #000}
@@ -173,6 +179,24 @@ dt{color:var(--mute)}dd{margin:0;overflow-wrap:anywhere}
 .scroll{overflow:auto;max-height:max(320px,calc(100vh - 250px))}
 #toast{position:fixed;left:50%;bottom:20px;transform:translateX(-50%);background:var(--ink);color:var(--bg);padding:9px 16px;border-radius:8px;opacity:0;pointer-events:none;transition:opacity .2s;z-index:10;max-width:calc(100vw - 32px);text-align:center}
 #toast.show{opacity:1}
+#login{position:fixed;inset:0;z-index:20;background:var(--bg);display:grid;place-items:center;padding:16px}
+#login form{width:100%;max-width:400px}
+#loginmsg{color:var(--bad);min-height:20px;margin:0}
+input[type=password],input[type=time],select{background:var(--card);border:1px solid var(--line);border-radius:8px;padding:8px 10px;min-width:0;color:var(--ink);font:inherit}
+input[type=password]{flex:1 1 180px;max-width:360px}
+.rate{color:var(--accent)}
+.kv{display:flex;gap:6px 18px;flex-wrap:wrap;margin:8px 0;font-size:13.5px}
+.kv b{font-variant-numeric:tabular-nums}
+.big{font-size:17px;font-weight:650;display:flex;align-items:center;margin-bottom:6px}
+.lst{list-style:none;margin:8px 0 0;padding:0;font-size:13.5px}
+.lst li{display:flex;gap:10px;align-items:baseline;padding:6px 0;border-top:1px solid var(--line);flex-wrap:wrap}
+.lst li>.grow{flex:1 1 200px;min-width:0}
+.lst .when{color:var(--mute);white-space:nowrap;font-variant-numeric:tabular-nums}
+.risk{color:var(--warn)}
+.form{display:grid;gap:8px;max-width:440px;margin-top:10px}
+.form label{font-size:13px;color:var(--mute);display:grid;gap:4px}
+.form input{max-width:none;width:100%}
+.ok{color:var(--ok)}
 [hidden]{display:none!important}
 
 @media(min-width:901px){
@@ -206,6 +230,7 @@ dt{color:var(--mute)}dd{margin:0;overflow-wrap:anywhere}
     <button role="tab" id="t-activity" data-tab="activity" aria-controls="tab-activity" aria-selected="false" tabindex="-1">Activity</button>
     <button role="tab" id="t-blocked" data-tab="blocked" aria-controls="tab-blocked" aria-selected="false" tabindex="-1">Blocked</button>
     <button role="tab" id="t-live" data-tab="live" aria-controls="tab-live" aria-selected="false" tabindex="-1">Live</button>
+    <button role="tab" id="t-settings" data-tab="settings" aria-controls="tab-settings" aria-selected="false" tabindex="-1">Settings</button>
   </nav>
   <span class="mute" id="status" role="status"><span class="dot" id="sdot"></span><span id="stext">loading…</span></span>
   <button id="theme" aria-label="Switch between dark and light" title="Dark / light">☀</button>
@@ -251,6 +276,10 @@ dt{color:var(--mute)}dd{margin:0;overflow-wrap:anywhere}
       <div id="netchart" style="margin-top:8px"></div>
       <div id="netacts"></div>
     </div>
+    <div class="grid2 even">
+      <div class="card"><h2>Internet connection</h2><div id="health"><div class="empty">Checking…</div></div></div>
+      <div class="card"><h2>By person</h2><p class="mute">What each person's devices did in the last 24 hours. Say whose a device is in its details.</p><div id="people"></div></div>
+    </div>
     <div class="card" id="domcard">
       <h2>Who used a site?</h2>
       <p class="mute">Type part of a site's address to see which devices contacted it.</p>
@@ -263,7 +292,7 @@ dt{color:var(--mute)}dd{margin:0;overflow-wrap:anywhere}
     </div>
   </section>
 
-  <section id="tab-blocked" role="tabpanel" aria-labelledby="t-blocked" hidden>
+  <section id="tab-blocked" role="tabpanel" aria-labelledby="t-blocked" class="stack" hidden>
     <div class="card">
       <h2>Blocked sites</h2>
       <p class="mute">A blocked site stops working on every device that uses this network normally. Devices on a VPN or their own private DNS are not affected.</p>
@@ -271,18 +300,38 @@ dt{color:var(--mute)}dd{margin:0;overflow-wrap:anywhere}
       <form class="row" id="blockform"><input type="text" id="blockq" placeholder="Site to block, e.g. tiktok.com" aria-label="Site to block"><button class="act">Block site</button></form>
       <div id="blockrows"></div>
     </div>
+    <div class="card">
+      <h2>Ready-made block lists</h2>
+      <p class="mute">Switch on a list to block thousands of known sites in one go. Lists update themselves every day. If a list blocks something you need, press Allow next to it.</p>
+      <div class="note" id="listsoff" hidden>Block lists are not switched on yet. On the Pi, get the latest netinv and run <span class="mono">sudo ./install.sh</span> once.</div>
+      <div id="lists"></div>
+      <div id="allowed"></div>
+    </div>
+    <div class="card">
+      <h2>What was blocked in the last 24 hours</h2>
+      <div id="refused"></div>
+    </div>
   </section>
 
-  <section id="tab-live" role="tabpanel" aria-labelledby="t-live" hidden>
+  <section id="tab-live" role="tabpanel" aria-labelledby="t-live" class="stack" hidden>
     <div class="card">
       <div class="row">
         <h2 style="margin:0">Happening now</h2>
         <span class="mute" id="livecount"></span>
         <input type="search" id="livefilter" class="spacer" placeholder="Filter by device or site" aria-label="Filter by device or site">
+        <button class="ghost" id="liveblocked" aria-pressed="false" title="Show only lookups that were blocked">Only blocked</button>
         <button class="ghost" id="livepause" aria-pressed="false">Pause</button>
       </div>
       <div class="scroll" id="live"></div>
     </div>
+    <div class="card"><h2>Comings and goings</h2><p class="mute">Devices joining, coming online and dropping off, and internet outages.</p><div id="events"></div></div>
+  </section>
+
+  <section id="tab-settings" role="tabpanel" aria-labelledby="t-settings" class="stack" hidden>
+    <div class="card"><h2>Dashboard password</h2><div id="set-pw"></div></div>
+    <div class="card"><h2>TP-Link Deco</h2><div id="set-deco"></div></div>
+    <div class="card"><h2>Alerts on your phone</h2><div id="set-notify"></div></div>
+    <div class="card"><h2>Use it like an app</h2><p class="mute" style="margin:0">On a phone, open this page and choose “Add to Home Screen” from the browser's share or menu button. netinv then opens full-screen from its own icon.</p></div>
   </section>
 
   <details class="help card" style="margin-top:12px">
@@ -291,10 +340,20 @@ dt{color:var(--mute)}dd{margin:0;overflow-wrap:anywhere}
       <li>Before a device can reach a site it asks for the site's address. That question is a <b>lookup</b>. netinv counts lookups, so it knows which sites a device contacted and roughly how often. It cannot see pages, messages, or how much data moved.</li>
       <li>A device name marked <b>guess</b> was worked out from what the device looks up. Give the device a name to replace the guess.</li>
       <li>Devices using a VPN, iCloud Private Relay or their own private DNS show little or nothing here. netinv flags them when it can tell.</li>
+      <li>With a Deco connected (Settings), devices take the names from the Deco app, and netinv estimates how much data each one moved from the speeds the Deco reports.</li>
       <li><b>Blocking</b> a site makes its lookups fail for the whole network. It can take a few minutes to kick in, and it cannot block a single device.</li>
     </ul>
   </details>
 </main>
+<div id="login" hidden>
+  <form class="card" id="loginform">
+    <h2>netinv</h2>
+    <p class="mute">This dashboard is locked. Enter its password.</p>
+    <div class="row"><input type="password" id="loginpw" autocomplete="current-password" placeholder="Password" aria-label="Dashboard password"><button class="act">Sign in</button></div>
+    <p id="loginmsg" role="alert"></p>
+    <details><summary>Forgot the password?</summary><p class="mute" style="margin-top:8px">On the Pi, run this and then set a new one in Settings:</p><p class="mono">sudo -u netinv python3 /opt/netinv/netinv.py --reset-password</p></details>
+  </form>
+</div>
 <div id="toast" role="status" aria-live="polite"></div>
 <script>
 "use strict";
@@ -312,11 +371,16 @@ function el(tag, attrs, ...kids){
   return e;
 }
 const fill = (node, ...kids) => node.replaceChildren(...nodes(kids));
-const api = p => fetch(p).then(r => { if (!r.ok) throw new Error(r.status); return r.json(); });
+const api = p => fetch(p).then(r => { if (r.status === 401) showLogin(); if (!r.ok) throw new Error(r.status); return r.json(); });
+function showLogin(){
+  if (!$("#login").hidden) return;
+  $("#login").hidden = false; $("#loginpw").value = ""; $("#loginpw").focus();
+}
 async function post(path, body){
   try {
     const r = await fetch(path, {method:"POST", headers:{"Content-Type":"application/json"}, body:JSON.stringify(body)});
     const j = await r.json().catch(() => ({}));
+    if (r.status === 401 && path !== "/api/login") showLogin();
     return r.ok ? {ok:true, ...j} : {ok:false, error:j.error || "That did not work."};
   } catch (e) { return {ok:false, error:"Cannot reach netinv."}; }
 }
@@ -329,6 +393,15 @@ function ago(ts){
   if (s < 86400) return Math.round(s/3600) + " h ago";
   return Math.round(s/86400) + " d ago";
 }
+function fmtBytes(n){
+  if (!n) return "0";
+  const u = ["B", "kB", "MB", "GB", "TB"], i = Math.min(u.length - 1, Math.floor(Math.log10(n) / 3));
+  return (n / 1000 ** i).toFixed(i > 1 && n / 1000 ** i < 100 ? 1 : 0) + " " + u[i];
+}
+const fmtRate = n => fmtBytes(n) + "/s";
+const when = ts => new Date(ts*1000).toLocaleString([], {month:"short", day:"numeric", hour:"numeric", minute:"2-digit"});
+const CONN = {wired:"Wired", band5:"Wi-Fi 5 GHz", band2_4:"Wi-Fi 2.4 GHz", band6:"Wi-Fi 6 GHz"};
+const connName = c => CONN[c] || c || "";
 const hourLabel = ts => new Date(ts*1000).toLocaleString([], {month:"short", day:"numeric", hour:"numeric"});
 const narrow = () => matchMedia("(max-width:900px)").matches;
 let toastTimer;
@@ -351,9 +424,11 @@ const share = (c, max) => `--p:${Math.round(c / Math.max(1, max) * 100)}%`;
 
 // ---- devices: names and icons ---------------------------------------------
 // A label or hostname is a real name. Failing that, the server's guess from the device's lookups, then the maker.
-const devName = d => d.label || d.hostname || d.hint || d.vendor || "Unknown device";
-const isGuess = d => !d.label && !d.hostname && !!d.hint;
-const isUnnamed = d => !d.label && !d.hostname;
+// The name set here wins, then the one from the Deco app, then what the device announces about itself.
+const ownName = d => d.label || d.deco_name || d.mdns || d.hostname;
+const devName = d => ownName(d) || d.hint || d.vendor || "Unknown device";
+const isGuess = d => !ownName(d) && !!d.hint;
+const isUnnamed = d => !ownName(d);
 const isReal = d => !d.mac.startsWith("ip:");
 const isSilent = d => isReal(d) && d.online && !d.queries && !d.infra;
 // Static drawings only: nothing from the network is ever put through innerHTML.
@@ -384,7 +459,7 @@ const KINDS = [
 ];
 function kindOf(d){
   const pick = t => { t = t.toLowerCase(); const k = KINDS.find(([, re]) => re.test(t)); return k && k[0]; };
-  const named = pick([d.label, d.hostname].join(" "));
+  const named = pick([d.label, d.deco_name, d.mdns, d.hostname].join(" "));
   if (named) return named;
   if (/^(Apple device|Android)/.test(d.hint || "")) return "phone";   // the guess lists several things; a phone is the likeliest
   return pick([d.hint, d.vendor].join(" ")) || "unknown";
@@ -503,6 +578,7 @@ let devices = [], byMac = new Map(), selected = null, range = 24, group = "base"
 let filter = "all", sort = {key:null, dir:1}, liveRows = [], livePaused = false, labelInput = null;
 let view = "list";
 try { if (localStorage.getItem("netinv-view") === "map") view = "map"; } catch (e) {}
+let ownerInput = null, histOpen = false, portsBusy = false, speedBusy = false, schedEdit = null, liveOnlyBlocked = false, hasDeco = false;
 let blocked = new Set(), canBlock = false, attention = [], attnSeen = "", attnAll = false, techOpen = false;
 
 // ---- blocking --------------------------------------------------------------
@@ -526,11 +602,15 @@ async function setBlock(target, on, question){
   if ($("#domres table")) searchDomain(null, true);
   return true;
 }
-// The Block / Unblock control at the end of a site row. Takes a row ({name, svc, whole, risky}) or a bare address.
+// The Block / Unblock control at the end of a site row. Takes a row ({name, svc, whole, risky, blocked}) or a bare address.
 function blockCell(r){
   if (typeof r === "string") r = {name:r};
   if (!canBlock) return el("td", {class:"fit"});
-  const name = r.name, by = blockedBy(name), stop = fn => e => { e.stopPropagation(); fn(); };
+  const name = r.name, stop = fn => e => { e.stopPropagation(); fn(); };
+  if (r.blocked === "list") return el("td", {class:"fit"},
+    el("span", {class:"tag bad", title:"On one of the ready-made block lists you switched on"}, "blocked by list"), " ",
+    el("button", {class:"mini", title:"Make an exception for this site", onclick:stop(() => setAllow(name, true))}, "Allow"));
+  const by = blockedBy(name) || (r.blocked === "manual" ? name : null);
   if (by) return el("td", {class:"fit"},
     el("span", {class:"tag bad", title: by === name ? "Blocked for the whole network" : `Blocked because ${by} is blocked`}, "blocked"),
     by === name ? [" ", el("button", {class:"mini", onclick:stop(() => setBlock(name, false))}, "Unblock")] : null);
@@ -539,10 +619,18 @@ function blockCell(r){
     : () => setBlock(name, true);
   return el("td", {class:"fit"}, el("button", {class:"mini", title: r.whole ? `Stop every device on the network from using ${r.svc}` : `Stop every device on the network from reaching ${name}`, onclick:stop(go)}, "Block"));
 }
+async function setAllow(domain, on){
+  if (on && !confirm(`Allow ${domain}?\n\nIt is on a block list you switched on. This makes an exception for it and everything under it.`)) return;
+  const r = await post("/api/allow", {domain, on});
+  if (!r.ok) { toast(r.error); return; }
+  toast(on ? `${domain} is now allowed` : `${domain} is no longer an exception`);
+  await refresh();
+}
 // Service name first when we know it, the raw address after.
 const siteCell = (r, max) => el("td", {class:"site" + (max ? " barcell" : ""), style: max ? share(r.c, max) : null},
   r.svc ? [r.svc, el("span", {class:"d mono"}, r.name)] : el("span", {class:"mono"}, r.name));
 
+const hhmm = m => m == null ? "" : String(Math.floor(m / 60)).padStart(2, "0") + ":" + String(m % 60).padStart(2, "0");
 async function loadBlocked(){
   const b = await api("/api/blocked");
   $("#blockoff").hidden = b.enabled;
@@ -550,16 +638,52 @@ async function loadBlocked(){
   // A blocked service is many addresses; show it as the one thing the person blocked.
   const groups = new Map();
   for (const r of b.rows) {
-    const k = r.whole ? "svc:" + r.svc : r.domain, g = groups.get(k) || {svc: r.whole ? r.svc : "", doms: [], added: r.added, c: 0};
+    const k = r.whole ? "svc:" + r.svc : r.domain, g = groups.get(k) || {key:k, svc: r.whole ? r.svc : "", doms: [], added: r.added, c: 0, from: r.t_from, to: r.t_to, active: r.active};
     g.doms.push(r.domain); g.c += r.c; g.added = Math.min(g.added, r.added); groups.set(k, g);
   }
-  fill($("#blockrows"), table([{t:"Blocked"},{t:"Since"},{t:"Tried in the last 24 hours",num:1},{t:""}],
+  const setHours = async (g, from, to) => {
+    for (const domain of g.doms) {  // exactly the addresses already blocked, never the wider service
+      const r = await post("/api/block", {domain, on:true, from, to});
+      if (!r.ok) { toast(r.error); return; }
+    }
+    schedEdit = null; toast(from ? `Blocked from ${from} to ${to} every day` : "Blocked all the time"); await loadBlocked(); refresh();
+  };
+  const whenCell = g => {
+    if (schedEdit === g.key) {
+      const a = el("input", {type:"time", value:hhmm(g.from) || "21:00", "aria-label":"Block from"}), z = el("input", {type:"time", value:hhmm(g.to) || "07:00", "aria-label":"Block until"});
+      return el("td", {}, el("div", {class:"row", style:"margin:0"}, a, "to", z,
+        el("button", {class:"mini", onclick:() => setHours(g, a.value, z.value)}, "Save"),
+        el("button", {class:"mini", onclick:() => setHours(g, "", "")}, "All the time"),
+        el("button", {class:"mini", onclick:() => { schedEdit = null; loadBlocked(); }}, "Cancel")));
+    }
+    return el("td", {}, g.from == null ? "All the time" : `${hhmm(g.from)} to ${hhmm(g.to)}, every day`,
+      g.from != null && !g.active ? el("span", {class:"tag", title:"Outside its hours, so it is allowed right now"}, "not blocking now") : null, " ",
+      el("button", {class:"mini", title:"Block only during certain hours, like bedtime", onclick:() => { schedEdit = g.key; loadBlocked(); }}, "Change hours"));
+  };
+  fill($("#blockrows"), table([{t:"Blocked"},{t:"When"},{t:"Tried in the last 24 hours",num:1},{t:""}],
     [...groups.values()].map(g => el("tr", {},
       el("td", {class:"site"}, g.svc ? [el("b", {}, g.svc), el("span", {class:"d"}, g.doms.length === 1 ? g.doms[0] : `${g.doms.length} addresses`)] : el("span", {class:"mono"}, g.doms[0])),
-      el("td", {}, new Date(g.added*1000).toLocaleDateString()),
+      whenCell(g),
       el("td", {class:"num"}, g.c ? `${fmt(g.c)} time${g.c === 1 ? "" : "s"}` : "not tried"),
       el("td", {class:"fit"}, el("button", {class:"ghost", onclick:() => setBlock(g.svc ? {service:g.svc} : g.doms[0], false)}, "Unblock")))),
     b.enabled ? "Nothing is blocked. Block a site here, or use the Block button next to any site on the other tabs." : ""));
+  $("#listsoff").hidden = b.can_lists;
+  const toggle = async (l, on) => {
+    if (on) toast(`Downloading “${l.title}”…`);
+    const r = await post("/api/list", {id:l.id, on});
+    toast(r.ok ? (on ? `“${l.title}” is on` : `“${l.title}” is off`) : r.error);
+    await loadBlocked(); refresh();
+  };
+  fill($("#lists"), el("ul", {class:"lst"}, b.lists.map(l => el("li", {},
+    el("div", {class:"grow"}, el("b", {}, l.title), l.enabled ? el("span", {class:"tag ok", style:"border-color:var(--ok)"}, "on") : null,
+      el("div", {class:"mute"}, l.about, l.enabled && l.count ? ` ${fmt(l.count)} sites, updated ${ago(l.updated)}.` : "")),
+    el("button", {class: l.enabled ? "ghost" : "act", disabled: !b.can_lists, onclick:() => toggle(l, !l.enabled)}, l.enabled ? "Turn off" : "Turn on")))));
+  fill($("#allowed"), b.allowed.length ? [el("h3", {style:"margin-top:16px"}, "Exceptions you allowed"),
+    el("ul", {class:"lst"}, b.allowed.map(a => el("li", {}, el("span", {class:"grow mono"}, a.domain),
+      el("button", {class:"mini", onclick:() => setAllow(a.domain, false).then(loadBlocked)}, "Remove"))))] : null);
+  fill($("#refused"), table([{t:"Site"},{t:"Devices",num:1},{t:"Times blocked",num:1},{t:""}],
+    b.refused.map(r => clickRow(() => searchDomain(r.name), {}, siteCell(r), el("td", {class:"num"}, r.devs), el("td", {class:"num"}, fmt(r.c)), blockCell(r))),
+    "Nothing was blocked in the last 24 hours."));
 }
 $("#blockform").addEventListener("submit", async e => {
   e.preventDefault();
@@ -576,6 +700,7 @@ const TILES = [
   ["unknown", "new, not reviewed", () => showDevices("new")],
   ["queries", "lookups in 24 hours", () => setTab("activity")],
   ["domains", "sites contacted", () => setTab("activity")],
+  ["refused", "lookups blocked", () => setTab("blocked")],
 ];
 $("#tiles").append(...TILES.map(([k, label, go]) => el("button", {class:"card tile", id:"tile-" + k, onclick:go}, el("b", {}, "–"), el("span", {}, label))));
 function showDevices(f){ filter = f; $("#devfilter").value = ""; setTab("devices"); renderDevices(); }
@@ -584,7 +709,7 @@ async function loadSummary(){
   const s = await api("/api/summary");
   $("#sdot").className = "dot on"; $("#status").classList.remove("bad");
   $("#stext").textContent = s.last_scan ? "network checked " + ago(s.last_scan) : "first network check in progress";
-  blocked = new Set(s.blocked); canBlock = s.can_block;
+  blocked = new Set(s.blocked); canBlock = s.can_block; hasDeco = s.deco;
   for (const [k] of TILES) $("#tile-" + k + " b").textContent = fmt(s[k]);
   $("#tile-unknown").classList.toggle("alert", s.unknown > 0);
   { // the network's last 24 hours, drawn into the lookups tile
@@ -634,6 +759,10 @@ function attnRow(it){
     text = `It uses ${it.services.join(", ")}.` + (relay && canBlock ? " You can turn Private Relay off for this network; Apple devices then fall back to normal lookups." : "");
     btns = [relay && canBlock ? el("button", {class:"act", onclick:async () => { if (await setBlock(["mask.icloud.com", "mask-h2.icloud.com"], true,
       "Turn off iCloud Private Relay on this network?\n\nApple devices will show a notice that Private Relay is unavailable here, and their activity becomes visible in netinv. This applies to every Apple device on the network.")) dismiss(it.key); }}, "Turn off Private Relay") : null, view, ignore];
+  } else if (it.kind === "guest") {
+    title = `${n} is on your guest Wi-Fi`;
+    text = "Reported by the Deco. Fine if you have visitors; worth a look if you do not.";
+    btns = [view, ignore];
   } else {
     title = `${n}: ${it.pct}% of what it does is ads and tracking`;
     text = `Mostly ${it.services.join(", ")}.` + (canBlock ? " You can block it for the whole network." : "");
@@ -693,7 +822,7 @@ function renderDevices(){
   for (const th of document.querySelectorAll("th[data-sort]")) {
     if (th.dataset.sort === sort.key) th.setAttribute("aria-sort", sort.dir > 0 ? "ascending" : "descending"); else th.removeAttribute("aria-sort");
   }
-  let list = devices.filter(FILTERS[filter]).filter(d => !f || [d.label,d.hostname,d.hint,d.vendor,d.mac,d.ip,d.mostly].join(" ").toLowerCase().includes(f));
+  let list = devices.filter(FILTERS[filter]).filter(d => !f || [d.label,d.deco_name,d.mdns,d.owner,d.hostname,d.hint,d.vendor,d.mac,d.ip,d.mostly,connName(d.conn)].join(" ").toLowerCase().includes(f));
   if (sort.key) {
     const get = SORTS[sort.key][0];
     list = list.slice().sort((a, b) => { const x = get(a), y = get(b); return (x < y ? -1 : x > y ? 1 : 0) * sort.dir; });
@@ -701,14 +830,18 @@ function renderDevices(){
   const focused = document.activeElement && document.activeElement.dataset ? document.activeElement.dataset.mac : null;
   const rows = list.map(d => {
     const name = devName(d);
-    const sub = [isGuess(d) ? "guessed from its activity" : null, d.vendor && d.vendor !== name ? d.vendor : null, d.ip, isReal(d) ? null : "seen only by its lookups"].filter(Boolean).join(" · ");
+    const conn = connName(d.conn_live || d.conn).replace("Wi-Fi ", "");
+    const sub = [isGuess(d) ? "guessed from its activity" : null, d.owner || null, conn || null, isUnnamed(d) && d.vendor && d.vendor !== name ? d.vendor : null, d.ip,
+      isReal(d) ? null : "seen only by its lookups"].filter(Boolean).join(" · ");
     return clickRow(() => select(d.mac), {class: d.mac === selected ? "sel" : "", "data-mac":d.mac, "aria-selected": d.mac === selected ? "true" : null},
       el("td", {}, el("div", {class:"dev"}, icon(d), el("div", {},
-        el("div", {class:"nm"}, name, d.known ? null : el("span", {class:"tag new"}, "new")),
+        el("div", {class:"nm"}, name, d.known ? null : el("span", {class:"tag new"}, "new"),
+          d.net === "guest" ? el("span", {class:"tag", title:"Connected to your guest Wi-Fi"}, "guest") : null),
         el("div", {class:"sub"}, sub)))),
       el("td", {class: d.mostly ? "" : "mute"}, d.mostly || (isSilent(d) ? "Nothing visible" : d.infra ? "Runs the network" : "–"),
         d.hidden ? el("span", {class:"tag", title:"Uses a VPN, iCloud Private Relay or private DNS: part of what it does is not visible"}, "partly hidden") : null),
-      el("td", {class:"num hide-s", title:sparkTip(d.spark)}, spark(d.spark, 84, 22), el("div", {class:"cnt"}, fmt(d.queries))),
+      el("td", {class:"num hide-s", title:sparkTip(d.spark)}, spark(d.spark, 84, 22), el("div", {class:"cnt"}, fmt(d.queries)),
+        d.down > 2000 || d.up > 2000 ? el("div", {class:"cnt rate", title:"Speed right now, from the Deco"}, `↓ ${fmtRate(d.down)}`) : null),
       el("td", {class:"num"}, d.online ? "online" : ago(d.last_seen)));
   });
   $("#map").hidden = view !== "map"; $("#listwrap").hidden = view === "map";
@@ -758,28 +891,49 @@ const TYPES = ["Phone", "Laptop", "Tablet", "TV", "Speaker", "Camera", "Smart pl
 function detailHead(d){
   const real = isReal(d), unnamed = isUnnamed(d);
   // Naming a device is reviewing it: one step instead of two.
-  const save = () => { const label = labelInput.value.trim(); update(d.mac, label ? {label, known:true} : {label}, label ? "Name saved" : "Name cleared"); };
+  const save = () => { const label = labelInput.value.trim(), owner = ownerInput.value.trim();
+    update(d.mac, label || owner ? {label, owner, known:true} : {label, owner}, "Saved"); };
   const todo = devices.filter(x => !x.known && x.mac !== d.mac);
-  labelInput = el("input", {type:"text", value:d.label || "", maxlength:80, placeholder:"e.g. Sam's phone, Living room TV", "aria-label":"Device name",
-    onkeydown:e => { if (e.key === "Enter") save(); }});
-  const nameRow = el("div", {class:"row", style:"margin:0"}, labelInput, el("button", {class:"act", onclick:save}, unnamed ? "Save name" : "Rename"));
+  const onEnter = e => { if (e.key === "Enter") save(); };
+  labelInput = el("input", {type:"text", value:d.label || "", maxlength:80, placeholder: ownName(d) ? `Rename (now: ${ownName(d)})` : "e.g. Sam's phone, Living room TV", "aria-label":"Device name", onkeydown:onEnter});
+  ownerInput = el("input", {type:"text", value:d.owner || "", maxlength:40, placeholder:"Whose is it? (optional)", "aria-label":"Whose device is it", list:"owners", style:"flex:0 1 170px", onkeydown:onEnter});
+  const owners = el("datalist", {id:"owners"}, [...new Set(devices.map(x => x.owner).filter(Boolean))].map(o => el("option", {value:o})));
+  const nameRow = el("div", {class:"row", style:"margin:0"}, labelInput, ownerInput, owners, el("button", {class:"act", onclick:save}, "Save"));
   const row = (k, v, mono) => v ? [el("dt", {}, k), el("dd", {class: mono ? "mono" : ""}, v)] : null;
-  const tech = el("details", {open: techOpen, ontoggle:e => techOpen = e.currentTarget.open}, el("summary", {}, "Technical details"),
+  // "This is the same device as ...": a laptop's Wi-Fi and its Ethernet port are two entries until merged.
+  const others = devices.filter(x => isReal(x) && x.mac !== d.mac && !x.infra);
+  const pick = el("select", {"aria-label":"The device this entry belongs to"}, el("option", {value:""}, "Choose a device…"), others.map(x => el("option", {value:x.mac}, `${devName(x)}${x.ip ? " (" + x.ip + ")" : ""}`)));
+  const merge = real && others.length ? el("div", {style:"margin-top:12px"}, el("div", {class:"mute", style:"font-size:13.5px;margin-bottom:6px"}, "Same device as another entry (for example its other network connection)? Merge them:"),
+    el("div", {class:"row", style:"margin:0"}, pick, el("button", {class:"ghost", onclick:async () => {
+      const into = byMac.get(pick.value);
+      if (!into || !confirm(`Merge this entry into ${devName(into)}?\n\nIts activity will be shown under ${devName(into)}. You can separate them again later.`)) return;
+      const r = await post("/api/device", {mac:d.mac, parent:into.mac});
+      if (!r.ok) { toast(r.error); return; }
+      attnSeen = ""; await refresh(); await select(into.mac, false); toast("Merged");
+    }}, "Merge"))) : null;
+  const also = (d.also || []).map(c => el("li", {}, el("span", {class:"grow"}, "Also connects as ", el("span", {class:"mono"}, c.mac), c.ip ? ` · ${c.ip}` : "", c.conn ? ` · ${connName(c.conn)}` : ""),
+    el("button", {class:"mini", onclick:() => update(c.mac, {parent:""}, "Separated")}, "Separate")));
+  const tech = el("details", {open: techOpen, ontoggle:e => techOpen = e.currentTarget.open}, el("summary", {}, "Technical details and merging"),
     el("dl", {}, row("IP address", d.ip, 1), row("IPv6 address", d.ip6, 1),
       row("Hardware address (MAC)", real ? d.mac + (d.randomized ? "  (private: made up by the device for this network)" : "") : "not seen", 1),
-      row("Name it reports", d.hostname), row("Maker", d.vendor), row("Looks like", d.hint),
-      row("First seen", real && d.first_seen ? new Date(d.first_seen*1000).toLocaleString([], {dateStyle:"medium", timeStyle:"short"}) : null)));
+      row("Connection", [connName(d.conn_live || d.conn), d.net === "guest" ? "guest network" : ""].filter(Boolean).join(", ")),
+      row("Name in the Deco app", d.deco_name), row("Name it announces", d.mdns), row("Name from the router", d.hostname),
+      row("Services it announces", (d.services || "").split(",").filter(Boolean).join(", ")), row("Maker", d.vendor), row("Looks like", d.hint),
+      row("First seen", real && d.first_seen ? new Date(d.first_seen*1000).toLocaleString([], {dateStyle:"medium", timeStyle:"short"}) : null)),
+    also.length ? el("ul", {class:"lst"}, also) : null, merge);
   return [
     el("div", {class:"dtitle"}, icon(d, true),
       el("div", {}, el("h2", {}, devName(d), d.known ? null : el("span", {class:"tag new"}, "new")),
-        el("div", {class:"dstate"}, d.online ? "Online now" : "Offline, last seen " + ago(d.last_seen), isGuess(d) ? " · name is a guess" : "")),
+        el("div", {class:"dstate"}, [d.online ? "Online now" : "Offline, last seen " + ago(d.last_seen), d.owner, connName(d.conn_live || d.conn),
+          d.net === "guest" ? "guest Wi-Fi" : "", isGuess(d) ? "name is a guess" : ""].filter(Boolean).join(" · "))),
       el("button", {class:"x", "aria-label":"Close device details", title:"Close", onclick:deselect}, "×")),
     !real ? el("p", {class:"mute", style:"margin-top:12px"}, "netinv saw lookups from this address but never matched it to a device, so it cannot be named.") : null,
     real && unnamed ? el("div", {class:"ask"}, el("h3", {}, "What is this device?"),
       el("p", {}, d.hint ? `It did not give a name. From what it does, it looks like: ${d.hint}. ` : "It did not give a name, and what it does is not enough to guess. ",
         d.randomized ? "To be sure, open Wi-Fi settings on the device you suspect and compare its Wi-Fi address with the hardware address under Technical details. "
                      : "To be sure, compare the hardware address under Technical details with the one printed on the device or shown in its network settings. ",
-        "Or switch a device's Wi-Fi off and see whether this one goes offline."),
+        "Or switch a device's Wi-Fi off and see whether this one goes offline.",
+        hasDeco ? "" : " Connecting your Deco in Settings brings in the names from the Deco app."),
       el("div", {class:"chips"}, TYPES.map(t => el("button", {title:`Start the name with "${t}"`, onclick:() => { labelInput.value = t; labelInput.focus(); }}, t))),
       nameRow) : null,
     real && !unnamed ? el("div", {style:"margin-top:12px"}, nameRow) : null,
@@ -790,6 +944,14 @@ function detailHead(d){
     tech,
   ];
 }
+const EVENT = {joined:"First seen on the network", online:"Came online", offline:"Went offline"};
+async function checkPorts(d){
+  portsBusy = true; renderDetail();
+  const r = await post("/api/ports", {mac:d.mac});
+  portsBusy = false;
+  if (!r.ok) toast(r.error);
+  renderDetail();
+}
 // refresh=true is the background tick: leave anything the user is interacting with alone.
 async function renderDetail(refresh){
   const d = byMac.get(selected);
@@ -798,23 +960,38 @@ async function renderDetail(refresh){
   try { data = await api(`/api/device?mac=${encodeURIComponent(d.mac)}&hours=${range}&group=${group}`); } catch (e) { return; }
   if (selected !== d.mac) return;
   const head = $("#dhead"), body = $("#dbody");
-  const busy = refresh && labelInput && labelInput.isConnected && (head.contains(document.activeElement) || labelInput.value !== (d.label || ""));
+  const busy = refresh && labelInput && labelInput.isConnected && (head.contains(document.activeElement) || labelInput.value !== (d.label || "") || ownerInput.value !== (d.owner || ""));
   if (!busy) fill(head, detailHead(d));
   const refocus = refresh && body.contains(document.activeElement) && document.activeElement.dataset.v;
   const seg = (label, opts, cur, set) => el("span", {class:"seg", role:"group", "aria-label":label}, opts.map(([v,t]) =>
     el("button", {"aria-pressed": String(v === cur), "data-v":v, onclick:async () => { set(v); await renderDetail(); const b = body.querySelector(`[data-v="${v}"]`); if (b) b.focus(); }}, t)));
   fill($("#dseg"), seg("Period", [[24,"Last 24 hours"],[168,"7 days"],[720,"30 days"]], range, v => range = v));
-  const max = Math.max(1, ...data.top.map(r => r.c));
+  const max = Math.max(1, ...data.top.map(r => r.c)), u = data.usage, real = isReal(d);
+  const ports = data.ports;
   fill($("#dact"),
-    el("p", {class:"say"}, d.infra && !data.activity.length ? "This is part of the network itself (your router, or the Pi running netinv). It does not ask netinv for addresses, so nothing shows here. That is normal."
+    el("p", {class:"say"}, d.infra && !data.activity.length ? "This is part of the network itself (your router, a mesh unit, or the Pi running netinv). It does not ask netinv for addresses, so nothing shows here. That is normal."
       : isSilent(d) && range === 24 ? "It is online, but netinv sees nothing from it. It may be using its own DNS or a VPN." : sentence(data.activity)),
+    u.down || u.up || d.down || d.up ? el("div", {class:"kv", title:"Worked out from the speeds your Deco reports every half minute, so treat it as a rough figure"},
+      el("span", {}, "Data in this period: about ", el("b", {}, "↓ " + fmtBytes(u.down)), " down, ", el("b", {}, "↑ " + fmtBytes(u.up)), " up"),
+      d.down || d.up ? el("span", {class:"rate"}, `Right now ↓ ${fmtRate(d.down)}  ↑ ${fmtRate(d.up)}`) : null) : null,
     data.activity.some(a => a.cat === "VPN & encrypted DNS") ? el("div", {class:"note"},
       "This device uses a VPN, iCloud Private Relay or private DNS, so part of what it does is not visible here.") : null,
     chart(data.hourly, range),
     activityList(data.activity),
     data.top.length ? [el("div", {class:"sec"}, el("h3", {}, "Sites it contacted"), seg("Detail", [["base","By site"],["domain","Every address"]], group, v => group = v)),
       table([{t:"Site"},{t:"Lookups",num:1},{t:"Last",num:1},{t:""}],
-        data.top.map(r => el("tr", {}, siteCell(r, max), el("td", {class:"num"}, fmt(r.c)), el("td", {class:"num"}, ago(Math.min(r.last + 3599, Date.now()/1000))), blockCell(r))))] : null);
+        data.top.map(r => el("tr", {}, siteCell(r, max),
+          el("td", {class:"num"}, fmt(r.c), r.refused ? el("div", {class:"cnt", title:"How many of these were blocked"}, `${fmt(r.refused)} blocked`) : null),
+          el("td", {class:"num"}, ago(Math.min(r.last + 3599, Date.now()/1000))), blockCell(r))))] : null,
+    real ? [el("div", {class:"sec"}, el("h3", {}, "Open doors"),
+        el("button", {class:"ghost", disabled: portsBusy || !d.ip, onclick:() => checkPorts(d)}, portsBusy ? "Checking…" : ports ? "Check again" : "Check this device")),
+      el("p", {class:"mute", style:"font-size:13.5px;margin:0"}, "Looks for services this device leaves open to the rest of your network. Takes a few seconds; the device needs to be on."),
+      ports ? (ports.open.length ? el("ul", {class:"lst"}, ports.open.map(o => el("li", {}, el("span", {class:"when mono"}, o.port),
+          el("span", {class:"grow"}, o.what, o.risk ? el("div", {class:"risk"}, "⚠ " + o.risk) : null))))
+        : el("p", {class:"ok", style:"margin:8px 0 0"}, "✓ Nothing open among the common ones.")) : null,
+      ports ? el("p", {class:"cnt", style:"margin:6px 0 0"}, "Checked " + ago(ports.ts)) : null] : null,
+    data.events.length ? el("details", {open: histOpen, ontoggle:e => histOpen = e.currentTarget.open, style:"margin-top:16px"}, el("summary", {}, "Recent history"),
+      el("ul", {class:"lst"}, data.events.map(e => el("li", {}, el("span", {class:"when"}, when(e.ts)), el("span", {class:"grow"}, EVENT[e.kind] || e.kind))))) : null);
   if (refocus) { const b = body.querySelector(`[data-v="${refocus}"]`); if (b) b.focus(); }
   $("#dempty").hidden = true; body.hidden = false;
 }
@@ -832,7 +1009,7 @@ async function searchDomain(q, quiet){
       rows.map(r => { const d = byMac.get(r.dev), name = d && isReal(d) ? devName(d) + (isUnnamed(d) && d.ip ? ` (${d.ip})` : "") : r.dev.replace(/^ip:/, "");
         return el("tr", {}, el("td", {class:"mono"}, r.domain),
           el("td", {}, d ? el("button", {class:"link", title:"Show this device", onclick:() => openDevice(r.dev)}, name) : name),
-          el("td", {class:"num"}, fmt(r.c)), el("td", {class:"num"}, hourLabel(r.first)), el("td", {class:"num"}, hourLabel(r.last)), blockCell(r.domain)); }),
+          el("td", {class:"num"}, fmt(r.c)), el("td", {class:"num"}, hourLabel(r.first)), el("td", {class:"num"}, hourLabel(r.last)), blockCell({name:r.domain, blocked:r.blocked})); }),
       `No device has contacted anything matching “${term}”.`));
   if (!quiet) $("#domcard").scrollIntoView({behavior:"smooth", block:"nearest"});
 }
@@ -853,12 +1030,12 @@ async function loadLive(){
 }
 function renderLive(){
   const f = $("#livefilter").value.trim().toLowerCase();
-  const rows = liveRows.filter(r => !f || (r.name + " " + r.domain + " " + r.ip).toLowerCase().includes(f));
-  $("#livecount").textContent = (f ? `${rows.length} of ${liveRows.length}` : `latest ${liveRows.length}`) + (livePaused ? " · paused" : " · updating");
+  const rows = liveRows.filter(r => (!liveOnlyBlocked || r.blocked) && (!f || (r.name + " " + r.domain + " " + r.ip).toLowerCase().includes(f)));
+  $("#livecount").textContent = (f || liveOnlyBlocked ? `${rows.length} of ${liveRows.length}` : `latest ${liveRows.length}`) + (livePaused ? " · paused" : " · updating");
   fill($("#live"), table([{t:"Time"},{t:"Device"},{t:"Address"},{t:""}],
-    rows.map(r => el("tr", {}, el("td", {class:"mono", style:"white-space:nowrap"}, new Date(r.ts*1000).toLocaleTimeString()),
+    rows.slice(0, 300).map(r => el("tr", {}, el("td", {class:"mono", style:"white-space:nowrap"}, new Date(r.ts*1000).toLocaleTimeString()),
       el("td", {}, byMac.has(r.dev) ? el("button", {class:"link", title:"Show this device", onclick:() => openDevice(r.dev)}, r.name) : r.name),
-      el("td", {class:"mono"}, r.domain), blockCell(r.domain))),
+      el("td", {class:"mono"}, r.domain), blockCell({name:r.domain, blocked:r.blocked}))),
     liveRows.length ? "Nothing matches." : "Nothing since netinv started."));
 }
 $("#livefilter").addEventListener("input", renderLive);
@@ -868,9 +1045,117 @@ $("#livepause").addEventListener("click", e => {
   e.currentTarget.setAttribute("aria-pressed", String(livePaused));
   if (livePaused) renderLive(); else loadLive().catch(() => {});
 });
+$("#liveblocked").addEventListener("click", e => {
+  liveOnlyBlocked = !liveOnlyBlocked;
+  e.currentTarget.setAttribute("aria-pressed", String(liveOnlyBlocked));
+  e.currentTarget.classList.toggle("act", liveOnlyBlocked); e.currentTarget.classList.toggle("ghost", !liveOnlyBlocked);
+  renderLive();
+});
+async function loadEvents(){
+  const rows = await api("/api/events");
+  const who = e => byMac.has(e.mac) ? el("button", {class:"link", onclick:() => openDevice(e.mac)}, e.name || e.mac) : (e.name || e.mac);
+  const say = e => e.kind === "internet_down" ? "Internet connection lost" : e.kind === "internet_up" ? `Internet back ${e.info || ""}`
+    : [who(e), e.kind === "joined" ? " joined your network for the first time" : e.kind === "online" ? " came online" : " went offline"];
+  fill($("#events"), rows.length ? el("ul", {class:"lst"}, rows.map(e => el("li", {}, el("span", {class:"when"}, when(e.ts)), el("span", {class:"grow"}, say(e)))))
+    : el("div", {class:"empty"}, "Nothing yet. Events appear here as devices come and go."));
+}
+
+// ---- internet health and people (Activity tab) ----------------------------
+async function loadHealth(){
+  if (speedBusy) return;
+  const h = await api("/api/health"), last = h.speed[0];
+  const span = o => { const mins = Math.max(1, Math.round(((o.end || Date.now()/1000) - o.start) / 60)); return `${when(o.start)}, ${o.end ? "for " + mins + " min" : "still down"}`; };
+  const test = async () => {
+    speedBusy = true; btn.disabled = true; btn.textContent = "Testing… about 8 seconds";
+    const r = await post("/api/speedtest", {});
+    speedBusy = false;
+    toast(r.ok ? `Download speed: ${r.down} Mbps` : r.error);
+    loadHealth();
+  };
+  const btn = el("button", {class:"ghost", onclick:test, title:"Downloads for a few seconds and times it. Uses up to about 100 MB of data."}, "Run a speed test");
+  fill($("#health"),
+    h.ok == null ? el("div", {class:"empty"}, "First check is on its way.") : [
+      el("div", {class:"big"}, el("span", {class:"dot " + (h.ok ? "on" : "bad")}), h.ok ? "Internet is up" : "Internet is down"),
+      el("div", {class:"kv"}, h.uptime_day != null ? el("span", {}, "Up ", el("b", {}, h.uptime_day + "%"), " of the last 24 hours") : null,
+        h.uptime_week != null ? el("span", {}, el("b", {}, h.uptime_week + "%"), " of the last 7 days") : null,
+        h.ms != null ? el("span", {}, "Typical response ", el("b", {}, h.ms + " ms")) : null),
+      el("div", {title:"How quickly the internet answered, hour by hour, over the last 24 hours. Lower is better."}, (sp => { sp.style.marginLeft = "0"; return sp; })(spark(h.hours.map(x => x.ms), 280, 34)),
+        el("div", {class:"cnt"}, "Response time, last 24 hours")),
+      el("h3", {style:"margin-top:14px"}, "Outages, last 7 days"),
+      h.outages.length ? el("ul", {class:"lst"}, h.outages.map(o => el("li", {}, span(o)))) : el("p", {class:"ok", style:"margin:6px 0 0"}, "✓ None"),
+      el("div", {class:"sec"}, el("h3", {}, "Speed"), btn),
+      last ? el("div", {class:"kv"}, el("span", {}, "Download ", el("b", {}, last.down + " Mbps"), ` · ${ago(last.ts)}`),
+        h.speed.length > 1 ? el("span", {class:"mute"}, "Before that: " + h.speed.slice(1, 5).map(x => x.down).join(", ") + " Mbps") : null)
+        : el("p", {class:"mute", style:"margin:0;font-size:13.5px"}, "Measures the Pi's own connection to the internet. Not run yet.")]);
+}
+async function loadPeople(){
+  const rows = await api("/api/people");
+  fill($("#people"), table([{t:"Person"},{t:"Devices",num:1},{t:"Mostly"},{t:"Lookups",num:1}],
+    rows.map(r => clickRow(() => { showDevices("all"); $("#devfilter").value = r.person; renderDevices(); }, {},
+      el("td", {}, el("b", {}, r.person)), el("td", {class:"num"}, `${r.online} of ${r.devices} online`),
+      el("td", {}, r.mostly || "–", r.services.length ? el("div", {class:"cnt"}, r.services.join(", ")) : null), el("td", {class:"num"}, fmt(r.queries)))),
+    "No devices have an owner yet. Open a device and fill in “Whose is it?”."));
+}
+
+// ---- settings --------------------------------------------------------------
+async function loadSettings(){
+  const st = await api("/api/settings"), field = (label, input) => el("label", {}, label, input);
+  const act = async (path, body, okMsg, then) => {
+    const r = await post(path, body);
+    toast(r.ok ? okMsg : r.error);
+    if (r.ok && then) await then(r);
+    if (r.ok) { await loadSettings(); refresh(); }
+  };
+  // password
+  const cur = el("input", {type:"password", autocomplete:"current-password"}), nw = el("input", {type:"password", autocomplete:"new-password"});
+  fill($("#set-pw"), st.has_password
+    ? [el("p", {class:"ok"}, "✓ This dashboard is locked with a password."),
+       el("div", {class:"form"}, field("Current password", cur), field("New password (at least 8 characters)", nw),
+         el("div", {class:"row", style:"margin:0"},
+           el("button", {class:"act", onclick:() => act("/api/password", {current:cur.value, new:nw.value}, "Password changed")}, "Change password"),
+           el("button", {class:"ghost", onclick:() => { if (confirm("Remove the password?\n\nAnyone on your Wi-Fi will be able to open this dashboard and block sites.")) act("/api/password", {current:cur.value, new:""}, "Password removed"); }}, "Remove password"),
+           el("button", {class:"ghost", onclick:async () => { await post("/api/logout", {}); showLogin(); }}, "Sign out")))]
+    : [el("p", {}, "Right now anyone on your Wi-Fi can open this page, see what every device does, and block sites. A password locks it."),
+       el("div", {class:"form"}, field("New password (at least 8 characters)", nw),
+         el("div", {}, el("button", {class:"act", onclick:() => act("/api/password", {new:nw.value}, "Password set")}, "Set password"))),
+       el("p", {class:"mute", style:"margin:10px 0 0;font-size:13.5px"}, "The page is served without encryption, so the password protects against casual access on your own network, not against someone capturing its traffic.")]);
+  // deco
+  const dc = st.deco, host = el("input", {type:"text", value:dc.host || "", placeholder:"Address of the main Deco, e.g. 192.168.68.1"}), dpw = el("input", {type:"password", autocomplete:"off"});
+  fill($("#set-deco"),
+    el("p", {}, "Connect your Deco and netinv uses the names you gave devices in the Deco app, shows whether each is wired or on Wi-Fi (and guest Wi-Fi), and estimates how much data each one moves. netinv only reads from the Deco; it changes nothing on it."),
+    !dc.available ? el("div", {class:"note"}, "The Deco add-on (deco.py) is missing on the Pi. Get the latest netinv and run sudo ./install.sh.") : null,
+    dc.configured ? el("div", {class:"big"}, el("span", {class:"dot " + (dc.ok ? "on" : "bad")}), dc.ok ? `Connected · ${dc.clients} devices online on the mesh` : "Not working right now") : null,
+    dc.configured && !dc.ok && dc.msg ? el("div", {class:"note"}, dc.msg, dc.halted ? " netinv has stopped trying, so the Deco does not lock your account. Enter the password again below." : "") : null,
+    dc.nodes.length ? el("ul", {class:"lst"}, dc.nodes.map(n => el("li", {}, el("span", {class:"dot " + (n.online ? "on" : "")}),
+      el("span", {class:"grow"}, el("b", {}, n.name), ` ${n.model}`, n.main ? " · main unit" : ""), el("span", {class:"when mono"}, n.ip)))) : null,
+    el("div", {class:"form"}, field("Deco address", host), field("Deco owner password (your TP-Link ID password)", dpw),
+      el("div", {class:"row", style:"margin:0"},
+        el("button", {class:"act", disabled: !dc.available, onclick:() => act("/api/settings/deco", {host:host.value, password:dpw.value}, "Deco connected")}, dc.configured ? "Reconnect" : "Connect"),
+        dc.configured ? el("button", {class:"ghost", onclick:() => act("/api/settings/deco", {host:""}, "Deco disconnected")}, "Disconnect") : null)),
+    el("ul", {class:"help", style:"margin:12px 0 0;padding-left:18px;color:var(--mute);font-size:13.5px"},
+      el("li", {}, "It must be the owner account. A Deco allows one owner session at a time, so if you also open the Deco app as the owner, one of the two gets signed out. The usual fix: in the Deco app, add a manager account (More > Managers) and use that one in the app."),
+      el("li", {}, "The password is stored on the Pi so netinv can sign in again by itself. That is why a dashboard password is required first."),
+      el("li", {}, "Data figures are estimates from the speeds the Deco reports, sampled every 30 seconds.")));
+  // alerts
+  const url = el("input", {type:"text", value:st.notify_url || "", placeholder:"https://ntfy.sh/a-name-nobody-would-guess"});
+  fill($("#set-notify"),
+    el("p", {}, "Get a message when a new device joins your network or your internet comes back after an outage. The easy way: install the free ntfy app, subscribe to a topic name you make up, and put its address here."),
+    el("div", {class:"form"}, field("Where to send alerts", url),
+      el("div", {class:"row", style:"margin:0"},
+        el("button", {class:"act", onclick:() => act("/api/settings/notify", {url:url.value, test:true}, url.value ? "Saved. A test alert is on its way." : "Alerts turned off")}, url.value || !st.notify_url ? "Save and send a test" : "Save"),
+        st.notify_url ? el("button", {class:"ghost", onclick:() => act("/api/settings/notify", {url:""}, "Alerts turned off")}, "Turn off") : null)),
+    el("p", {class:"mute", style:"margin:10px 0 0;font-size:13.5px"}, "Alerts leave your network through that address, so anyone who knows the topic name can read them. Pick one that is hard to guess."));
+}
+$("#loginform").addEventListener("submit", async e => {
+  e.preventDefault();
+  const r = await post("/api/login", {password:$("#loginpw").value});
+  if (!r.ok) { $("#loginmsg").textContent = r.error; $("#loginpw").select(); return; }
+  $("#loginmsg").textContent = ""; $("#login").hidden = true;
+  refresh();
+});
 
 // ---- tabs and refresh ------------------------------------------------------
-const TABS = ["devices", "activity", "blocked", "live"];
+const TABS = ["devices", "activity", "blocked", "live", "settings"];
 function setTab(t){
   if (!TABS.includes(t)) t = "devices";
   const changed = t !== tab; tab = t;
@@ -919,14 +1204,19 @@ $("#theme").addEventListener("click", () => {
 if (document.documentElement.dataset.theme === "light") $("#theme").textContent = "☾";
 
 async function refresh(){
+  if (!$("#login").hidden) return;
   try {
     // devices and the block list are needed on every tab: other views link back to them
     await Promise.all([loadSummary(), loadDevices(), loadAttention()]);
     renderAttention();
-    if (tab === "devices" && selected) await renderDetail(true);
-    if (tab === "blocked") await loadBlocked();
-    if (tab === "live" && !livePaused) await loadLive();
+    const typing = sel => { const a = document.activeElement; return $(sel).contains(a) && /INPUT|SELECT/.test(a.tagName); };
+    if (tab === "devices" && selected && !portsBusy) await renderDetail(true);
+    if (tab === "activity") await Promise.all([loadHealth(), loadPeople()]);
+    if (tab === "blocked" && !schedEdit && !typing("#tab-blocked")) await loadBlocked();
+    if (tab === "live") { if (!livePaused) await loadLive(); await loadEvents(); }
+    if (tab === "settings" && !typing("#tab-settings")) await loadSettings();
   } catch (e) {
+    if (!$("#login").hidden) return;
     $("#sdot").className = "dot bad"; $("#status").classList.add("bad");
     $("#stext").textContent = "cannot reach netinv, retrying";
   }

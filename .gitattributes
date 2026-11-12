@@ -1,0 +1,3 @@
+# Everything here runs on a Raspberry Pi: keep Unix line endings whatever machine it is edited on.
+* text=auto eol=lf
+*.png binary

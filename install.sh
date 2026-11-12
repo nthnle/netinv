@@ -17,6 +17,10 @@ PORT="${PORT:-8080}"
 NOTIFY_URL="${NOTIFY_URL:-}"
 BLOCK_DIR=/var/lib/netinv-dns
 BLOCK_FILE="$BLOCK_DIR/blocked.conf"
+HOSTS_FILE="$BLOCK_DIR/blocklist.hosts"
+# Optional: ENCRYPTED_DNS=1 sends lookups to the internet encrypted (DNS-over-HTTPS via dnscrypt-proxy),
+# so your internet provider cannot read them.
+ENCRYPTED_DNS="${ENCRYPTED_DNS:-0}"
 [[ -n "$IFACE" && -n "$GATEWAY" && -n "$PI_IP" && -n "$SUBNET" ]] || { echo "Could not detect interface/gateway. Set IFACE= and GATEWAY=." >&2; exit 1; }
 echo "Interface $IFACE, Pi address $PI_IP, network $SUBNET, router $GATEWAY"
 
@@ -34,10 +38,26 @@ id netinv &>/dev/null || useradd --system --no-create-home --shell /usr/sbin/nol
 install -d -o netinv -g netinv -m 750 /var/lib/netinv
 install -d -o root -g netinv -m 750 /var/log/netinv
 install -d /opt/netinv
-install -m 644 "$SRC/netinv.py" "$SRC/dashboard.html" /opt/netinv/
+install -m 644 "$SRC/netinv.py" "$SRC/deco.py" "$SRC/dashboard.html" /opt/netinv/
 # The block list lives outside /var/lib/netinv so dnsmasq (another user) can read it.
 install -d -o netinv -g netinv -m 755 "$BLOCK_DIR"
 [[ -f "$BLOCK_FILE" ]] || install -o netinv -g netinv -m 644 /dev/null "$BLOCK_FILE"
+[[ -f "$HOSTS_FILE" ]] || install -o netinv -g netinv -m 644 /dev/null "$HOSTS_FILE"
+
+UPSTREAM_LINES="server=$UPSTREAM1
+server=$UPSTREAM2"
+if [[ "$ENCRYPTED_DNS" == 1 ]]; then
+  # Debian's dnscrypt-proxy package listens on 127.0.2.1:53. Only switch to it once it demonstrably answers.
+  apt-get install -y -qq dnscrypt-proxy || true
+  systemctl enable -q --now dnscrypt-proxy.socket dnscrypt-proxy.service 2>/dev/null || true
+  sleep 3
+  if dig +short +time=3 +tries=2 example.com @127.0.2.1 2>/dev/null | grep -q '^[0-9]'; then
+    UPSTREAM_LINES="server=127.0.2.1"
+    echo "Encrypted upstream DNS is on (dnscrypt-proxy)."
+  else
+    echo "WARNING: dnscrypt-proxy did not answer on 127.0.2.1, so lookups stay unencrypted ($UPSTREAM1, $UPSTREAM2)." >&2
+  fi
+fi
 
 # dnsmasq keeps the owner it finds; group netinv lets the collector read the log.
 DNSMASQ_USER="$(getent passwd dnsmasq >/dev/null && echo dnsmasq || echo nobody)"
@@ -50,14 +70,15 @@ cat > /etc/dnsmasq.d/netinv.conf <<EOF
 port=53
 bogus-priv
 no-resolv
-server=$UPSTREAM1
-server=$UPSTREAM2
+$UPSTREAM_LINES
 # bare hostnames, common local domains and reverse lookups stay with the router
 server=//$GATEWAY
 server=/lan/home/$GATEWAY
 rev-server=$SUBNET,$GATEWAY
 # sites blocked from the dashboard; re-read on SIGHUP (netinv-blocklist.path)
 servers-file=$BLOCK_FILE
+# ready-made block lists switched on in the dashboard: every listed name answers 0.0.0.0
+addn-hosts=$HOSTS_FILE
 cache-size=10000
 log-queries=extra
 log-facility=/var/log/netinv/dnsmasq.log
@@ -88,7 +109,7 @@ Wants=network-online.target
 [Service]
 User=netinv
 Group=netinv
-ExecStart=/usr/bin/python3 /opt/netinv/netinv.py --iface $IFACE --gateway $GATEWAY --port $PORT --block-file $BLOCK_FILE${NOTIFY_URL:+ --notify-url $NOTIFY_URL}
+ExecStart=/usr/bin/python3 /opt/netinv/netinv.py --iface $IFACE --gateway $GATEWAY --port $PORT --block-file $BLOCK_FILE --block-hosts $HOSTS_FILE${NOTIFY_URL:+ --notify-url $NOTIFY_URL}
 Restart=on-failure
 RestartSec=5
 # raw sockets for arp-scan, nothing else
@@ -104,14 +125,15 @@ PrivateTmp=true
 WantedBy=multi-user.target
 EOF
 
-# netinv runs unprivileged and cannot signal dnsmasq. systemd watches the block list
-# and tells dnsmasq to re-read it (SIGHUP also drops its cache, so blocks apply at once).
+# netinv runs unprivileged and cannot signal dnsmasq. systemd watches the two block files
+# and tells dnsmasq to re-read them (SIGHUP also drops its cache, so blocks apply at once).
 cat > /etc/systemd/system/netinv-blocklist.path <<EOF
 [Unit]
 Description=netinv - watch the DNS block list
 
 [Path]
 PathChanged=$BLOCK_FILE
+PathChanged=$HOSTS_FILE
 
 [Install]
 WantedBy=multi-user.target

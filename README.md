@@ -1,58 +1,194 @@
 # netinv
 
-Home network inventory and DNS activity, on a Raspberry Pi.
+**See every device on your home network, what each one is doing, and do something about it.** Runs on a Raspberry Pi.
 
-- **Inventory**: ARP sweep of the LAN every 60 s. Each device gets a row keyed by MAC with IP, vendor, hostname, first/last seen, a label you set, and a "new" flag until you review it.
-- **Traffic (DNS level)**: the Pi runs dnsmasq as the network's DNS forwarder with query logging. netinv follows that log and attributes every lookup to a device.
-- **Dashboard**: `http://<pi-ip>:8080`. Devices, per-device domains over 24h/7d/30d, network-wide top domains, domains first seen in the last 24h, "which devices looked up X", and a live tail.
-- **What is it, what is it doing**: a device that reports no name gets a guess from its lookups ("Apple device", "Samsung TV", "Tuya-based smart plug"), marked as a guess until you label it. Lookups are rolled up into plain categories (streaming, social, gaming, smart home, ads, VPN & encrypted DNS…) per device and for the whole network. Both come from a built-in list in `netinv.py` (`FINGERPRINTS`, `SERVICES`); anything not on it shows as "Other sites". Shares are by number of lookups, not time or data.
-- **Needs your attention**: the first thing on the page is a short to-do list: new devices to name, devices whose activity is hidden (VPN, iCloud Private Relay, their own DNS), devices that mostly talk to ad trackers. Each item has buttons to deal with it or ignore it for good.
-- **Blocking**: every site row has a Block button, and the Blocked tab manages the list. Blocking a known service ("TikTok") blocks all the addresses netinv knows it uses. It works by making dnsmasq refuse to look the name up, so it applies to the whole network, not to one device, and a device on a VPN or its own DNS is not affected. A block can take a few minutes to bite because devices remember addresses they already looked up.
-- **Map and trends**: the device list can switch to a map (router in the middle, a circle per device, sized by activity), and every device shows a small 24-hour activity line. Dark by default; the button in the top right switches to light.
-- **Housekeeping**: "Forget device" removes a stale entry and its history; "Download list (CSV)" exports the inventory.
-- **Alerts (optional)**: install with `NOTIFY_URL=https://ntfy.sh/<a-topic-you-pick>` (or any URL that accepts a plain-text POST) to get a push message when a new device joins. The message leaves your network, so pick a topic name nobody would guess.
+![The device list with a device open](docs/devices.png)
 
-One Python file, standard library only, one SQLite database.
+netinv answers three questions most routers leave you guessing about:
+
+- **What is on my network?** Every device, named where possible, with new arrivals flagged for you to check.
+- **What is each one doing?** Not a wall of server names, but "mostly streaming video (Netflix, YouTube)" or "44% of what it does is ad tracking".
+- **What can I do about it?** Block a site or a whole service, on a schedule if you like. Switch on ready-made block lists. Get an alert when something new joins.
+
+It is one Python program with no dependencies beyond what Raspberry Pi OS ships, one SQLite file, and a dashboard you open in a browser.
+
+![The network map](docs/map.png)
+
+## What you get
+
+**Devices**
+- A full inventory, refreshed every minute, with a list view and a map view.
+- Names from wherever they can be found: ones you type, your Deco app (optional), what devices announce about themselves, and your router.
+- A best guess at anything unnamed ("Apple device", "Samsung TV", "Tuya-based smart plug"), clearly marked as a guess.
+- A to-do list at the top of the page: new devices, devices hiding their activity, devices that mostly talk to ad trackers, devices on your guest Wi-Fi.
+- Per device: what it mostly does, when it was active, which sites it contacted, when it came and went, and which network services it leaves open.
+- Say whose each device is and see activity per person. Merge a device's Wi-Fi and Ethernet entries into one.
+
+**Blocking**
+- Block any site from wherever you see it. Blocking a known service such as TikTok blocks all of its known addresses in one click.
+- Block only during certain hours, such as 21:00 to 07:00.
+- Ready-made lists you can switch on: ads, trackers and malware; adult sites; gambling; social media; fake news. They update daily, and you can allow exceptions.
+
+**Your connection**
+- Is the internet up, how responsive is it, and when did it drop in the last week.
+- A download speed test you can run from the dashboard.
+
+**Extras**
+- A password for the dashboard.
+- Alerts to your phone when a new device joins or the internet comes back after an outage.
+- TP-Link Deco integration: device names from the Deco app, wired or Wi-Fi, guest network, and an estimate of data used per device.
+- Works on a phone, and can be added to the home screen like an app.
+- Download the inventory as a spreadsheet.
+
+## How it works, in one paragraph
+
+The Pi becomes your network's DNS server (using dnsmasq). Before any device can reach a site it has to ask for that site's address, so the Pi sees which device asked for what, and can refuse to answer for anything you block. Separately, netinv sweeps the network every minute to find devices. That is all it relies on: it does not sit in the path of your traffic, and it cannot read pages, messages or passwords.
+
+## What you need
+
+- A Raspberry Pi (any model with networking) running Raspberry Pi OS or Debian, connected to your network, preferably by cable.
+- A router that lets you change the DNS server it hands out. Most do. Some ISP-supplied routers do not; see [Limits](#limits).
 
 ## Install
 
-On the Pi (Raspberry Pi OS / Debian, wired Ethernet preferred):
+On the Pi:
 
 ```
-git clone <this repo> && cd netinv
+git clone https://github.com/nthnle/netinv
+cd netinv
 sudo ./install.sh
 ```
 
-The installer detects the interface and router; override with `IFACE=`, `GATEWAY=`, `UPSTREAM1=`, `UPSTREAM2=`, `PORT=`, `NOTIFY_URL=`. To update, `git pull` and run it again with the same overrides; your data is kept. Then, on the router:
+The installer sets up dnsmasq and netinv as services and prints the dashboard address, `http://<pi-address>:8080`. The device inventory starts filling in straight away.
 
-1. Give the Pi a DHCP reservation so its address never changes.
-2. Set the DHCP-advertised DNS server to the Pi's address, and only that.
+Then two changes on your router, so the Pi sees lookups:
 
-The inventory works before step 2. DNS data appears as devices renew their leases.
+1. **Reserve the Pi's address** (DHCP reservation), so it never changes.
+2. **Set the DNS server your router hands out to the Pi's address**, and only that one.
 
-## What it will not see
+Devices pick up the new setting as they reconnect, which can take up to a day. Turning a device's Wi-Fi off and on speeds it up.
 
-- **Encrypted or hard-coded DNS.** Browsers with DNS-over-HTTPS on, iCloud Private Relay, and devices that ignore DHCP DNS (some Google/Chromecast and smart TV gear uses 8.8.8.8) bypass the Pi. A device that is online with zero lookups is the tell.
-- **IPv6 DNS from the router.** If your ISP gives you IPv6, the router may advertise its own v6 resolver alongside the Pi. Turn off the router's IPv6 DNS advertisement (RDNSS / DHCPv6 DNS) if it has that setting.
-- **Volume.** DNS shows who talks to what, not how many bytes. That needs flow data from the router, which consumer routers do not export.
-- **Routers that lock the DNS setting.** Some ISP-managed mesh systems do not let you change DHCP DNS. The workaround is disabling the router's DHCP and letting dnsmasq on the Pi do DHCP too.
+After that, open the dashboard and go to **Settings** to set a password.
 
-## Things to know
+### Installer options
 
-- **The Pi becomes a dependency.** If it is off, name resolution stops for the whole house. Adding a second DNS server on the router avoids that but lets devices skip the log at will. Pick one.
-- **Private MAC addresses.** Phones use a different randomized MAC per network, and some rotate it. Those are tagged "private MAC"; a rotating one shows up as a new device each time.
-- **Offline is approximate.** Sleeping phones often ignore ARP, so "online" means "answered a sweep in the last 5 minutes".
-- **No login on the dashboard.** Anyone on the LAN can read it. It rejects cross-site writes and unexpected Host headers, but if you have a guest network that can reach the Pi, firewall port 8080 or run with `--bind 127.0.0.1` behind a reverse proxy. If you reach it by a custom name, add `--allow-host name`.
-- **Storage.** Lookups are stored as hourly counts per device and domain, kept 30 days (`--retention-days`). The raw dnsmasq log rotates daily and keeps 3 days.
+Set these in front of the command, for example `sudo ENCRYPTED_DNS=1 ./install.sh`.
 
-## Operate
+| Option | What it does | Default |
+|---|---|---|
+| `IFACE` | Network interface to use, such as `eth0` | detected |
+| `GATEWAY` | Your router's address | detected |
+| `PORT` | Dashboard port | `8080` |
+| `UPSTREAM1`, `UPSTREAM2` | Where lookups are forwarded | `1.1.1.1`, `9.9.9.9` |
+| `ENCRYPTED_DNS=1` | Forward lookups encrypted (DNS-over-HTTPS through dnscrypt-proxy), so your internet provider cannot read them. Falls back to the plain upstreams if it does not come up. | off |
+| `NOTIFY_URL` | Where to send alerts. Easier to set later in Settings. | none |
+
+### Updating
+
+```
+cd netinv
+git pull
+sudo ./install.sh
+```
+
+Pass the same options you used the first time. Your data is kept.
+
+## Using it
+
+| Tab | What is there |
+|---|---|
+| **Devices** | The to-do list, the inventory (list or map), and everything about a device when you click it. |
+| **Activity** | What the whole network did in the last 24 hours, internet health and speed, activity per person, and "who used this site?". |
+| **Blocked** | What you have blocked and when, ready-made block lists, exceptions, and what was actually blocked today. |
+| **Live** | Lookups as they happen, and a log of devices coming and going. |
+| **Settings** | Password, Deco connection, alerts. |
+
+A few things worth knowing:
+
+- **Naming a device also marks it as reviewed.** "Go through them" walks you through everything new.
+- **A block takes a few minutes to bite**, because devices remember addresses they already looked up.
+- **Blocking is for the whole network.** netinv cannot block a site for one device only.
+- **"Lookups" are counts of address requests**, not time spent or data moved. The shares in "what it has been doing" are shares of lookups.
+
+### Connecting a TP-Link Deco
+
+In **Settings**, enter the address of your main Deco and the Deco owner password (your TP-Link ID password). netinv only reads from the Deco.
+
+Before you do:
+
+- **It has to be the owner account**, and a Deco allows one owner session at a time. If you also use the Deco app as the owner, the app and netinv will keep signing each other out. The usual fix is to add a manager account in the Deco app (More > Managers) and use that in the app.
+- **The password is stored on the Pi** so netinv can sign in again on its own. netinv will not accept it until the dashboard has a password.
+- **Data-used figures are estimates**, worked out from the speeds the Deco reports every 30 seconds.
+- You can test the connection by hand first: `python3 deco.py http://<deco-address>`.
+
+The Deco integration follows the protocol used by the [Home Assistant Deco integration](https://github.com/amosyuen/ha-tplink-deco). It has been tested against a simulated Deco. Reports from real hardware, working or not, are welcome.
+
+### Alerts
+
+netinv can send a line of text to any address that accepts one. The simplest setup is the free [ntfy](https://ntfy.sh) app: subscribe to a topic name you make up, then put `https://ntfy.sh/<that-name>` in Settings. Anyone who knows the topic name can read the alerts, so make it hard to guess.
+
+## Limits
+
+Be clear-eyed about what a DNS-based tool can and cannot do.
+
+- **It sees names, not content.** Which sites, how often, and when. Never pages, messages or how much data moved (except the Deco estimate).
+- **Some devices bypass it.** Anything using a VPN, iCloud Private Relay, a browser with its own encrypted DNS, or a hard-coded DNS server (some smart TVs and streaming sticks) shows little or nothing. netinv flags these when it can tell, and can switch Private Relay off for your network.
+- **The same goes for blocking.** A device that bypasses the Pi's DNS is not affected by blocks.
+- **Guesses are guesses.** Device types and activity categories come from a built-in list of well-known services in `netinv.py`. Anything not on it shows as "Other sites".
+- **Phones use private hardware addresses.** A phone that rotates its address shows up as a new device each time.
+- **"Online" is approximate.** A sleeping phone often does not answer the sweep. Connecting a Deco makes this more accurate.
+- **The Pi becomes a dependency.** If it is off, nothing on your network can look up addresses. Adding a second DNS server on the router avoids that, but lets devices skip netinv whenever they like.
+- **IPv6.** If your provider gives you IPv6, your router may advertise its own IPv6 DNS server alongside the Pi. Turn that off in the router if it has the setting.
+- **Locked-down routers.** If yours will not let you change the DNS server, the workaround is to turn off its DHCP and let dnsmasq on the Pi do that job too. netinv does not set this up for you.
+
+## Security and privacy
+
+- **Set the dashboard password.** Without one, anyone on your network can open the dashboard and block sites.
+- **The dashboard is plain HTTP.** The password stops casual access on your own network. It does not protect against someone capturing traffic on that network. Do not expose the dashboard to the internet.
+- **Everything is stored on the Pi**, in `/var/lib/netinv`. Activity is kept as hourly counts per device and site for 30 days (`--retention-days`).
+- **What leaves your network**, and only this:
+  - Your DNS lookups, to the upstream servers, as with any DNS setup.
+  - A connection check to `1.1.1.1` and `9.9.9.9` every minute.
+  - Block lists you switch on, downloaded daily from GitHub.
+  - A speed test download from Cloudflare, when you press the button.
+  - Alerts, to the address you configure, if you configure one.
+- **Forgot the dashboard password?** On the Pi: `sudo -u netinv python3 /opt/netinv/netinv.py --reset-password`. This also removes the stored Deco password.
+
+**Use it on your own network, and be straight with the people on it.** netinv shows which sites each device contacts. Tell the people you live with that it is running.
+
+## Under the hood
+
+| Path | What |
+|---|---|
+| `/opt/netinv/` | `netinv.py` (everything), `deco.py` (Deco client), `dashboard.html` |
+| `/var/lib/netinv/netinv.db` | All data |
+| `/var/lib/netinv-dns/` | Block files that netinv writes and dnsmasq reads |
+| `/var/log/netinv/dnsmasq.log` | Raw lookups, rotated daily, kept 3 days |
+| `/etc/dnsmasq.d/netinv.conf` | dnsmasq settings |
+| `/etc/systemd/system/netinv*.{service,path}` | The service, and a watcher that makes dnsmasq re-read the block files |
+
+netinv runs as its own unprivileged user. Its only extra privilege is sending the raw packets the network sweep needs.
 
 ```
 systemctl status netinv dnsmasq
 journalctl -u netinv -f
-sqlite3 /var/lib/netinv/netinv.db 'select mac, ip, vendor, label from devices'
 ```
 
-Files: `/opt/netinv` (code), `/var/lib/netinv/netinv.db` (data), `/var/log/netinv/dnsmasq.log` (raw queries), `/var/lib/netinv-dns/blocked.conf` (block list, written by netinv, read by dnsmasq), `/etc/dnsmasq.d/netinv.conf`, `/etc/systemd/system/netinv.service`, `/etc/systemd/system/netinv-blocklist.{path,service}` (tell dnsmasq to re-read the block list when it changes).
+**Uninstall:** set your router's DNS setting back first, then:
 
-Uninstall: `sudo systemctl disable --now netinv dnsmasq`, set the router's DNS back, then remove the files above.
+```
+sudo systemctl disable --now netinv netinv-blocklist.path dnsmasq
+sudo rm -rf /opt/netinv /var/lib/netinv /var/lib/netinv-dns /var/log/netinv \
+  /etc/dnsmasq.d/netinv.conf /etc/logrotate.d/netinv /etc/systemd/system/netinv*
+```
+
+## Status
+
+This is a personal project that works for a home network. The core (inventory, activity, blocking, dashboard) runs on a real Pi. The newer pieces are less proven: the Deco integration has only met a simulator, and `ENCRYPTED_DNS=1` has not been tried across Pi OS versions. If something does not work for you, open an issue with the output of `journalctl -u netinv -n 50`.
+
+## Credits
+
+- Block lists: [Steven Black's hosts project](https://github.com/StevenBlack/hosts).
+- Deco protocol: [ha-tplink-deco](https://github.com/amosyuen/ha-tplink-deco) by amosyuen.
+- Alerts work nicely with [ntfy](https://ntfy.sh).
+- DNS by [dnsmasq](https://thekelleys.org.uk/dnsmasq/doc.html), discovery by [arp-scan](https://github.com/royhills/arp-scan).
