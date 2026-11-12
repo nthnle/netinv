@@ -6,14 +6,15 @@
 <meta name="color-scheme" content="light dark">
 <title>netinv</title>
 <style>
-:root{--bg:#f6f7f9;--card:#fff;--ink:#1b1f24;--mute:#5d6878;--line:#e3e6ea;--accent:#2563eb;--soft:#2563eb1a;--ok:#15803d;--warn:#b45309;--bad:#b91c1c;--bar:#3b82f6}
-@media(prefers-color-scheme:dark){:root{--bg:#0f1216;--card:#181c22;--ink:#e6e9ee;--mute:#9aa4b2;--line:#2a3038;--accent:#7aa7ff;--soft:#7aa7ff24;--ok:#4ade80;--warn:#fbbf24;--bad:#f87171;--bar:#5b9bff}}
+:root{--bg:#f6f7f9;--card:#fff;--ink:#1b1f24;--mute:#5d6878;--line:#e3e6ea;--accent:#2563eb;--soft:#2563eb1a;--ok:#15803d;--warn:#b45309;--warnbg:#b453091a;--bad:#b91c1c;--bar:#3b82f6}
+@media(prefers-color-scheme:dark){:root{--bg:#0f1216;--card:#181c22;--ink:#e6e9ee;--mute:#9aa4b2;--line:#2a3038;--accent:#7aa7ff;--soft:#7aa7ff24;--ok:#4ade80;--warn:#fbbf24;--warnbg:#fbbf241a;--bad:#f87171;--bar:#5b9bff}}
 *{box-sizing:border-box}
-body{margin:0;background:var(--bg);color:var(--ink);font:14px/1.45 system-ui,-apple-system,Segoe UI,Roboto,sans-serif}
+body{margin:0;background:var(--bg);color:var(--ink);font:15px/1.45 system-ui,-apple-system,Segoe UI,Roboto,sans-serif}
 button,input{font:inherit;color:inherit}
 :focus-visible{outline:2px solid var(--accent);outline-offset:2px}
 .mute{color:var(--mute)}.mono{font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:12.5px}
-h1{font-size:18px;margin:0}h2{font-size:14px;margin:0 0 10px}
+h1{font-size:18px;margin:0}h2{font-size:16px;margin:0 0 4px}h3{font-size:14px;margin:0}
+p{margin:0 0 10px}
 
 header{position:sticky;top:0;z-index:5;background:var(--bg);border-bottom:1px solid var(--line)}
 .bar{display:flex;align-items:center;gap:8px 16px;flex-wrap:wrap;max-width:1280px;margin:0 auto;padding:10px 20px}
@@ -21,24 +22,34 @@ nav{display:flex;gap:4px}
 nav button,.seg button,.chips button{background:none;border:1px solid transparent;color:var(--mute);padding:6px 12px;border-radius:8px;cursor:pointer;white-space:nowrap}
 nav button:hover,.seg button:hover,.chips button:hover{color:var(--ink)}
 nav button[aria-selected=true],.seg button[aria-pressed=true],.chips button[aria-pressed=true]{background:var(--card);border-color:var(--line);color:var(--ink);font-weight:600}
-#status{margin-left:auto;display:flex;align-items:center;white-space:nowrap}
+nav .n{display:inline-block;min-width:18px;margin-left:6px;padding:0 5px;border-radius:99px;background:var(--warn);color:var(--card);font-size:11px;font-weight:700;text-align:center}
+#status{margin-left:auto;display:flex;align-items:center;white-space:nowrap;font-size:13px}
 #status.bad{color:var(--bad)}
 
 main{padding:16px 20px 48px;max-width:1280px;margin:0 auto}
-.card{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:14px}
-.tiles{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:12px;margin-bottom:16px}
-.tile{text-align:left;cursor:pointer;transition:border-color .12s}
+.card{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:16px}
+.tiles{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:12px;margin-bottom:12px}
+.tile{text-align:left;cursor:pointer;transition:border-color .12s;padding:12px 16px}
 .tile:hover{border-color:var(--accent)}
-.tile b{display:block;font-size:26px;font-weight:650;line-height:1.2;font-variant-numeric:tabular-nums}
-.tile span{color:var(--mute)}
+.tile b{display:block;font-size:24px;font-weight:650;line-height:1.2;font-variant-numeric:tabular-nums}
+.tile span{color:var(--mute);font-size:13px}
 .tile.alert b{color:var(--warn)}
-.grid2{display:grid;grid-template-columns:minmax(0,1.3fr) minmax(0,1fr);gap:12px;align-items:start}
+.grid2{display:grid;grid-template-columns:minmax(0,1.25fr) minmax(0,1fr);gap:12px;align-items:start}
 .grid2.even{grid-template-columns:minmax(0,1fr) minmax(0,1fr)}
 .stack>*+*{margin-top:12px}
 
+/* needs attention */
+#attn{border-color:var(--warn)}
+#attn.clear{border-color:var(--line);padding:10px 16px;color:var(--mute)}
+.attn-row{display:flex;gap:12px;align-items:center;padding:10px 0;border-top:1px solid var(--line);flex-wrap:wrap}
+.attn-row .txt{flex:1 1 260px;min-width:0}
+.attn-row .txt b{display:block}
+.attn-row .txt span{color:var(--mute);font-size:13.5px}
+.attn-row .btns{display:flex;gap:8px;flex-wrap:wrap}
+
 table{width:100%;border-collapse:separate;border-spacing:0}
 th{text-align:left;font-weight:600;color:var(--mute);font-size:12px;padding:6px 8px;border-bottom:1px solid var(--line);white-space:nowrap;position:sticky;top:0;background:var(--card);z-index:1}
-td{padding:7px 8px;border-bottom:1px solid var(--line);vertical-align:top;overflow-wrap:anywhere}
+td{padding:8px;border-bottom:1px solid var(--line);vertical-align:middle;overflow-wrap:anywhere}
 tr:last-child td{border-bottom:0}
 th button{background:none;border:0;padding:0;font-weight:600;color:inherit;cursor:pointer}
 th button:hover{color:var(--ink)}
@@ -50,32 +61,35 @@ tbody tr.click:hover,tbody tr.sel{background:var(--soft)}
 tbody tr.sel td:first-child{box-shadow:inset 3px 0 var(--accent)}
 tbody tr.click:focus-visible{outline-offset:-2px}
 .num{text-align:right;font-variant-numeric:tabular-nums;white-space:nowrap}
-.nowrap{white-space:nowrap}
+.fit{width:1%;white-space:nowrap;text-align:right}
 .barcell{background:linear-gradient(to right,var(--soft) var(--p,0%),transparent var(--p,0%)) no-repeat}
-.sub{color:var(--mute);font-size:12px;padding-left:14px}
-.sub:empty,.only-s{display:none}
-.acts{margin:12px 0}
-.acts h3{font-size:12px;font-weight:600;color:var(--mute);margin:0 0 4px}
-.act-row{display:flex;gap:10px;align-items:baseline;padding:5px 8px;border-radius:6px}
-.act-row .what{flex:1;min-width:0}
-.act-row .svcs{color:var(--mute);font-size:12.5px}
-.act-row.bg .cat{color:var(--mute)}
-.act-row:not(.bg) .cat{font-weight:600}
-.svc{color:var(--mute);font-family:system-ui,-apple-system,Segoe UI,Roboto,sans-serif;font-size:12px;margin-left:8px;white-space:nowrap}
-a.ghost{display:inline-block;text-decoration:none;border:1px solid var(--line);border-radius:8px;padding:7px 12px;color:var(--ink);white-space:nowrap}
-a.ghost:hover{border-color:var(--mute)}
+#devtable{table-layout:fixed}
+#devtable th[data-sort=name]{width:46%}#devtable th[data-sort=queries]{width:78px}#devtable th[data-sort=seen]{width:86px}
+.dev{display:flex;gap:10px;align-items:center;min-width:0}
+.dev .nm{font-weight:600;overflow-wrap:anywhere}
+.dev .sub{color:var(--mute);font-size:12.5px}
+.ico{width:34px;height:34px;border-radius:9px;background:var(--bg);border:1px solid var(--line);display:grid;place-items:center;position:relative;flex:none;color:var(--mute)}
+.ico svg{width:19px;height:19px;fill:none;stroke:currentColor;stroke-width:1.5;stroke-linecap:round;stroke-linejoin:round}
+.ico.on{color:var(--ink)}
+.ico.on::after{content:"";position:absolute;right:-3px;bottom:-3px;width:10px;height:10px;border-radius:50%;background:var(--ok);border:2px solid var(--card)}
 .dot{display:inline-block;width:8px;height:8px;border-radius:50%;background:var(--line);margin-right:6px;flex:none}
 .dot.on{background:var(--ok)}.dot.bad{background:var(--bad)}
-.tag{display:inline-block;font-size:11px;padding:1px 7px;border-radius:99px;border:1px solid var(--line);color:var(--mute);margin-left:6px;white-space:nowrap}
+.tag{display:inline-block;font-size:11px;font-weight:400;padding:1px 7px;border-radius:99px;border:1px solid var(--line);color:var(--mute);margin-left:6px;white-space:nowrap;vertical-align:middle}
 .tag.new{color:var(--warn);border-color:var(--warn)}
+.tag.bad{color:var(--bad);border-color:var(--bad)}
+.site .d{color:var(--mute);margin-left:8px}
 
-input[type=text],input[type=search]{background:var(--card);border:1px solid var(--line);border-radius:8px;padding:7px 10px;width:100%;max-width:340px;min-width:0;flex:1 1 180px}
-button.act{background:var(--accent);color:#fff;border:0;border-radius:8px;padding:7px 12px;cursor:pointer}
-@media(prefers-color-scheme:dark){button.act{color:#0f1216;font-weight:600}}
-button.ghost{background:none;border:1px solid var(--line);border-radius:8px;padding:7px 12px;cursor:pointer}
-button.ghost:hover{border-color:var(--mute)}
+input[type=text],input[type=search]{background:var(--card);border:1px solid var(--line);border-radius:8px;padding:8px 10px;width:100%;max-width:360px;min-width:0;flex:1 1 180px}
+button.act{background:var(--accent);color:#fff;border:0;border-radius:8px;padding:8px 14px;cursor:pointer;font-weight:600;white-space:nowrap}
+@media(prefers-color-scheme:dark){button.act{color:#0f1216}}
+button.ghost,a.ghost{background:none;border:1px solid var(--line);border-radius:8px;padding:8px 12px;cursor:pointer;white-space:nowrap;color:var(--ink);text-decoration:none;display:inline-block}
+button.ghost:hover,a.ghost:hover{border-color:var(--mute)}
+button.mini{background:none;border:1px solid var(--line);border-radius:6px;padding:2px 8px;font-size:12px;cursor:pointer;color:var(--mute);white-space:nowrap}
+button.mini:hover{color:var(--bad);border-color:var(--bad)}
 button.link{background:none;border:0;padding:0;color:var(--accent);cursor:pointer;text-align:left}
 button.link:hover{text-decoration:underline}
+button.link.danger{color:var(--bad)}
+button:disabled,input:disabled{opacity:.5;cursor:not-allowed}
 .row{display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:10px}
 .chips{display:flex;gap:2px;flex-wrap:wrap}
 .chips button{padding:5px 10px}
@@ -83,7 +97,7 @@ button.link:hover{text-decoration:underline}
 .spacer{margin-left:auto}
 
 .readout{font-size:12px;color:var(--mute);min-height:18px;margin-bottom:4px;font-variant-numeric:tabular-nums}
-.chart{display:flex;align-items:flex-end;gap:2px;height:96px;border-bottom:1px solid var(--line);position:relative}
+.chart{display:flex;align-items:flex-end;gap:2px;height:84px;border-bottom:1px solid var(--line);position:relative}
 .chart.dense{gap:0}
 .chart>div{flex:1;height:100%;display:flex;align-items:flex-end;min-width:0}
 .chart>div:hover{background:var(--soft)}
@@ -91,20 +105,38 @@ button.link:hover{text-decoration:underline}
 .chart>div:hover i{background:var(--accent)}
 .chart .none{position:absolute;inset:0;display:grid;place-items:center;color:var(--mute);pointer-events:none}
 .axis{display:flex;justify-content:space-between;font-size:11px;color:var(--mute);margin-top:4px}
+.acts{margin:12px 0}
+.acts h4{font-size:12px;font-weight:600;color:var(--mute);margin:0 0 4px}
+.act-row{display:flex;gap:10px;align-items:baseline;padding:5px 8px;border-radius:6px}
+.act-row .what{flex:1;min-width:0}
+.act-row .svcs{color:var(--mute);font-size:13px}
+.act-row.bg .cat{color:var(--mute)}
+.act-row:not(.bg) .cat{font-weight:600}
 
 #detail{scroll-margin-top:70px}
-.dtitle{display:flex;align-items:flex-start;gap:8px}
-.dtitle h2{margin:0;font-size:16px;overflow-wrap:anywhere}
-.dtitle .x{margin-left:auto;background:none;border:0;color:var(--mute);font-size:20px;line-height:1;padding:0 4px;cursor:pointer;border-radius:6px}
+.dtitle{display:flex;align-items:center;gap:10px}
+.dtitle h2{margin:0;font-size:18px;overflow-wrap:anywhere}
+.dtitle .x{margin-left:auto;align-self:flex-start;background:none;border:0;color:var(--mute);font-size:22px;line-height:1;padding:0 4px;cursor:pointer;border-radius:6px}
 .dtitle .x:hover{color:var(--ink)}
-.dstate{display:flex;align-items:center;margin:2px 0 10px;color:var(--mute)}
-dl{display:grid;grid-template-columns:auto minmax(0,1fr);gap:3px 14px;margin:0 0 12px}
+.dstate{color:var(--mute);font-size:13.5px}
+.ask{border:1px solid var(--warn);background:var(--warnbg);border-radius:10px;padding:12px;margin:12px 0}
+.ask h3{margin-bottom:4px}
+.ask p{font-size:13.5px;margin-bottom:8px}
+.ask .chips button{border-color:var(--line);background:var(--card);color:var(--ink);font-size:13px;padding:3px 10px;border-radius:99px;margin:0 4px 6px 0}
+.sec{display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin:18px 0 6px;padding-top:14px;border-top:1px solid var(--line)}
+.sec h3{margin-right:auto}
+.say{margin:0 0 10px}
+details{margin:10px 0}
+summary{cursor:pointer;color:var(--mute);font-size:13.5px}
+summary:hover{color:var(--ink)}
+dl{display:grid;grid-template-columns:auto minmax(0,1fr);gap:3px 14px;margin:8px 0 0;font-size:13.5px}
 dt{color:var(--mute)}dd{margin:0;overflow-wrap:anywhere}
-.note{border:1px solid var(--warn);color:var(--warn);border-radius:8px;padding:8px 10px;margin-bottom:10px;font-size:13px}
-.note.info{border-color:var(--line);color:var(--mute);background:var(--bg)}
+.note{border:1px solid var(--warn);background:var(--warnbg);border-radius:8px;padding:8px 10px;margin:10px 0;font-size:13.5px}
+.help ul{margin:8px 0 0;padding-left:18px;color:var(--mute);font-size:13.5px}
+.help li{margin-bottom:4px}
 .empty{color:var(--mute);padding:14px 4px}
-.scroll{overflow:auto;max-height:max(320px,calc(100vh - 290px))}
-#toast{position:fixed;left:50%;bottom:20px;transform:translateX(-50%);background:var(--ink);color:var(--bg);padding:8px 14px;border-radius:8px;opacity:0;pointer-events:none;transition:opacity .2s;z-index:10}
+.scroll{overflow:auto;max-height:max(320px,calc(100vh - 250px))}
+#toast{position:fixed;left:50%;bottom:20px;transform:translateX(-50%);background:var(--ink);color:var(--bg);padding:9px 16px;border-radius:8px;opacity:0;pointer-events:none;transition:opacity .2s;z-index:10;max-width:calc(100vw - 32px);text-align:center}
 #toast.show{opacity:1}
 [hidden]{display:none!important}
 
@@ -114,16 +146,19 @@ dt{color:var(--mute)}dd{margin:0;overflow-wrap:anywhere}
 @media(max-width:900px){
   .grid2,.grid2.even{grid-template-columns:minmax(0,1fr)}
   .scroll{max-height:none}
-  #detail{scroll-margin-top:96px}
+  #detail{scroll-margin-top:100px}
   #status{margin-left:0;order:3;width:100%}
-  nav{margin-left:auto}
+  nav{margin-left:auto;max-width:100%;overflow-x:auto}
 }
 @media(max-width:640px){
   .bar{padding:10px 16px}main{padding:12px 16px 40px}
   .tiles{grid-template-columns:repeat(2,minmax(0,1fr));gap:8px}
-  .tile b{font-size:22px}
+  .tile b{font-size:20px}
   .hide-s{display:none}
-  .only-s{display:inline}
+  #devtable th[data-sort=name]{width:48%}#devtable th[data-sort=seen]{width:74px}
+  #devtable td{padding:8px 4px}.dev{gap:8px}.dev .sub{overflow-wrap:anywhere}
+  nav button{padding:6px 9px}
+  .attn-row .btns{width:100%}
 }
 @media(prefers-reduced-motion:reduce){*{transition:none!important;scroll-behavior:auto!important}}
 </style>
@@ -132,113 +167,136 @@ dt{color:var(--mute)}dd{margin:0;overflow-wrap:anywhere}
 <header><div class="bar">
   <h1>netinv</h1>
   <nav role="tablist" aria-label="Views">
-    <button role="tab" id="t-devices" data-tab="devices" aria-controls="tab-devices" aria-selected="true">Devices</button>
-    <button role="tab" id="t-domains" data-tab="domains" aria-controls="tab-domains" aria-selected="false" tabindex="-1">Domains</button>
+    <button role="tab" id="t-devices" data-tab="devices" aria-controls="tab-devices" aria-selected="true">Devices<span class="n" id="navn" hidden></span></button>
+    <button role="tab" id="t-activity" data-tab="activity" aria-controls="tab-activity" aria-selected="false" tabindex="-1">Activity</button>
+    <button role="tab" id="t-blocked" data-tab="blocked" aria-controls="tab-blocked" aria-selected="false" tabindex="-1">Blocked</button>
     <button role="tab" id="t-live" data-tab="live" aria-controls="tab-live" aria-selected="false" tabindex="-1">Live</button>
   </nav>
   <span class="mute" id="status" role="status"><span class="dot" id="sdot"></span><span id="stext">loading…</span></span>
 </div></header>
 <main>
-  <section class="tiles" id="tiles" aria-label="Summary"></section>
-
-  <section id="tab-devices" role="tabpanel" aria-labelledby="t-devices" class="grid2">
-    <div class="card">
-      <div class="row">
-        <input type="search" id="devfilter" placeholder="Filter by name, IP, MAC, vendor" aria-label="Filter devices">
-        <div class="chips" id="chips" role="group" aria-label="Show">
-          <button data-f="all" aria-pressed="true">All<span class="n"></span></button>
-          <button data-f="online" aria-pressed="false">Online<span class="n"></span></button>
-          <button data-f="new" aria-pressed="false">New<span class="n"></span></button>
-          <button data-f="silent" aria-pressed="false" title="Online but no DNS lookups in 24h: may be bypassing the Pi's DNS">No lookups<span class="n"></span></button>
+  <section id="tab-devices" role="tabpanel" aria-labelledby="t-devices" class="stack">
+    <div class="card" id="attn" hidden></div>
+    <div class="tiles" id="tiles" aria-label="Summary"></div>
+    <div class="grid2">
+      <div class="card">
+        <div class="row">
+          <input type="search" id="devfilter" placeholder="Search devices" aria-label="Search devices by name, address or maker">
+          <div class="chips" id="chips" role="group" aria-label="Show">
+            <button data-f="all" aria-pressed="true">All<span class="n"></span></button>
+            <button data-f="online" aria-pressed="false">Online<span class="n"></span></button>
+            <button data-f="new" aria-pressed="false" title="Devices you have not named or reviewed yet">New<span class="n"></span></button>
+            <button data-f="silent" aria-pressed="false" title="Online, but netinv saw no activity from them in the last 24 hours">No activity<span class="n"></span></button>
+          </div>
         </div>
-        <a class="ghost spacer" href="/api/devices.csv" download title="Download the full device list as a spreadsheet">Export CSV</a>
+        <div class="scroll"><table id="devtable">
+          <thead><tr>
+            <th data-sort="name"><button>Device</button></th>
+            <th data-sort="mostly"><button title="What it mainly did in the last 24 hours">Mostly doing</button></th>
+            <th data-sort="queries" class="num hide-s"><button title="How many times it asked for a site's address in the last 24 hours">Lookups</button></th>
+            <th data-sort="seen" class="num"><button>Last seen</button></th>
+          </tr></thead>
+          <tbody id="devrows"></tbody>
+        </table></div>
+        <div class="row" style="margin:12px 0 0"><a class="ghost" href="/api/devices.csv" download title="Download the full device list as a spreadsheet">Download list (CSV)</a></div>
       </div>
-      <div class="scroll"><table>
-        <thead><tr>
-          <th data-sort="name"><button>Device</button></th>
-          <th data-sort="ip" class="hide-s"><button>IP</button></th>
-          <th data-sort="mostly"><button title="What its lookups in the last 24h were mainly for, ignoring background chatter">Mostly, 24h</button></th>
-          <th data-sort="queries" class="num hide-s"><button>Lookups 24h</button></th>
-          <th data-sort="seen" class="num"><button>Last seen</button></th>
-        </tr></thead>
-        <tbody id="devrows"></tbody>
-      </table></div>
-    </div>
-    <div class="card" id="detail">
-      <div class="empty" id="dempty">Select a device to see what it has been looking up.</div>
-      <div id="dbody" hidden><div id="dhead"></div><div class="row" id="dseg"></div><div id="dact"></div></div>
+      <div class="card" id="detail">
+        <div class="empty" id="dempty">Pick a device on the left to see what it is, what it has been doing, and what you can do about it.</div>
+        <div id="dbody" hidden><div id="dhead"></div><div class="sec"><h3>What it has been doing</h3><span id="dseg"></span></div><div id="dact"></div></div>
+      </div>
     </div>
   </section>
 
-  <section id="tab-domains" role="tabpanel" aria-labelledby="t-domains" class="stack" hidden>
+  <section id="tab-activity" role="tabpanel" aria-labelledby="t-activity" class="stack" hidden>
     <div class="card">
-      <h2>Lookups per hour, last 24h</h2>
-      <div id="netchart"></div>
-    </div>
-    <div class="card">
-      <h2>What the network is doing, last 24h</h2>
+      <h2>What your network did in the last 24 hours</h2>
+      <div id="netchart" style="margin-top:8px"></div>
       <div id="netacts"></div>
     </div>
-    <div class="grid2 even">
-      <div class="card"><h2>Top domains, last 24h</h2><div id="top"></div></div>
-      <div class="card"><h2>First seen in the last 24h</h2><div id="fresh"></div></div>
-    </div>
     <div class="card" id="domcard">
-      <h2>Which devices looked up…</h2>
-      <form class="row" id="domform" role="search"><input type="search" id="domq" placeholder="e.g. tiktok, amazonaws.com" aria-label="Search domains"><button class="act">Search</button></form>
-      <div id="domres"><div class="empty">Search for part of a domain, or click one in the tables above.</div></div>
+      <h2>Who used a site?</h2>
+      <p class="mute">Type part of a site's address to see which devices contacted it.</p>
+      <form class="row" id="domform" role="search"><input type="search" id="domq" placeholder="e.g. tiktok, netflix.com" aria-label="Site to look for"><button class="act">Search</button></form>
+      <div id="domres"></div>
+    </div>
+    <div class="grid2 even">
+      <div class="card"><h2>Most contacted sites</h2><p class="mute">Last 24 hours. Click one to see who used it.</p><div id="top"></div></div>
+      <div class="card"><h2>New on your network</h2><p class="mute">Sites nothing here had contacted before the last 24 hours.</p><div id="fresh"></div></div>
+    </div>
+  </section>
+
+  <section id="tab-blocked" role="tabpanel" aria-labelledby="t-blocked" hidden>
+    <div class="card">
+      <h2>Blocked sites</h2>
+      <p class="mute">A blocked site stops working on every device that uses this network normally. Devices on a VPN or their own private DNS are not affected.</p>
+      <div class="note" id="blockoff" hidden>Blocking is not switched on yet. On the Pi, get the latest netinv and run <span class="mono">sudo ./install.sh</span> once.</div>
+      <form class="row" id="blockform"><input type="text" id="blockq" placeholder="Site to block, e.g. tiktok.com" aria-label="Site to block"><button class="act">Block site</button></form>
+      <div id="blockrows"></div>
     </div>
   </section>
 
   <section id="tab-live" role="tabpanel" aria-labelledby="t-live" hidden>
     <div class="card">
       <div class="row">
-        <h2 style="margin:0">Most recent lookups</h2>
+        <h2 style="margin:0">Happening now</h2>
         <span class="mute" id="livecount"></span>
-        <input type="search" id="livefilter" class="spacer" placeholder="Filter by device or domain" aria-label="Filter live lookups">
+        <input type="search" id="livefilter" class="spacer" placeholder="Filter by device or site" aria-label="Filter by device or site">
         <button class="ghost" id="livepause" aria-pressed="false">Pause</button>
       </div>
       <div class="scroll" id="live"></div>
     </div>
   </section>
+
+  <details class="help card" style="margin-top:12px">
+    <summary>How to read this page</summary>
+    <ul>
+      <li>Before a device can reach a site it asks for the site's address. That question is a <b>lookup</b>. netinv counts lookups, so it knows which sites a device contacted and roughly how often. It cannot see pages, messages, or how much data moved.</li>
+      <li>A device name marked <b>guess</b> was worked out from what the device looks up. Give the device a name to replace the guess.</li>
+      <li>Devices using a VPN, iCloud Private Relay or their own private DNS show little or nothing here. netinv flags them when it can tell.</li>
+      <li><b>Blocking</b> a site makes its lookups fail for the whole network. It can take a few minutes to kick in, and it cannot block a single device.</li>
+    </ul>
+  </details>
 </main>
 <div id="toast" role="status" aria-live="polite"></div>
 <script>
 "use strict";
 const $ = s => document.querySelector(s);
-// Every string from the network (hostnames, domains, vendors) goes in via textContent, never innerHTML.
+const SVG = "http://www.w3.org/2000/svg";
+// Every string from the network (hostnames, domains, vendors) goes in via text nodes, never innerHTML.
+const nodes = kids => kids.flat(Infinity).filter(k => k != null && k !== false).map(k => k.nodeType ? k : document.createTextNode(String(k)));
 function el(tag, attrs, ...kids){
   const e = document.createElement(tag);
   for (const [k,v] of Object.entries(attrs||{})) {
     if (v == null || v === false) continue;
-    if (k === "class") e.className = v; else if (k.startsWith("on")) e.addEventListener(k.slice(2), v); else e.setAttribute(k, v);
+    if (k === "class") e.className = v; else if (k.startsWith("on")) e.addEventListener(k.slice(2), v); else e.setAttribute(k, v === true ? "" : v);
   }
-  for (const k of kids.flat(Infinity)) if (k != null && k !== false) e.append(k.nodeType ? k : document.createTextNode(String(k)));
+  e.append(...nodes(kids));
   return e;
 }
+const fill = (node, ...kids) => node.replaceChildren(...nodes(kids));
 const api = p => fetch(p).then(r => { if (!r.ok) throw new Error(r.status); return r.json(); });
+async function post(path, body){
+  try {
+    const r = await fetch(path, {method:"POST", headers:{"Content-Type":"application/json"}, body:JSON.stringify(body)});
+    const j = await r.json().catch(() => ({}));
+    return r.ok ? {ok:true, ...j} : {ok:false, error:j.error || "That did not work."};
+  } catch (e) { return {ok:false, error:"Cannot reach netinv."}; }
+}
 const fmt = n => Number(n).toLocaleString();
 function ago(ts){
   if (!ts) return "never";
   const s = Math.max(0, Date.now()/1000 - ts);
   if (s < 90) return "just now";
-  if (s < 3600) return Math.round(s/60) + "m ago";
-  if (s < 86400) return Math.round(s/3600) + "h ago";
-  return Math.round(s/86400) + "d ago";
+  if (s < 3600) return Math.round(s/60) + " min ago";
+  if (s < 86400) return Math.round(s/3600) + " h ago";
+  return Math.round(s/86400) + " d ago";
 }
 const hourLabel = ts => new Date(ts*1000).toLocaleString([], {month:"short", day:"numeric", hour:"numeric"});
-// A label or hostname is a real name. Failing that, the server's guess from the device's lookups, then the vendor.
-const devName = d => d.label || d.hostname || d.hint || d.vendor || "Unknown device";
-const isGuess = d => !d.label && !d.hostname && !!d.hint;
-const isUnnamed = d => !d.label && !d.hostname;
-const GUESS_TIP = "Guessed from the domains this device looks up. Give it a label once you know what it is.";
-const isReal = d => !d.mac.startsWith("ip:");
-const isSilent = d => isReal(d) && d.online && !d.queries;
 const narrow = () => matchMedia("(max-width:900px)").matches;
 let toastTimer;
 function toast(msg){
   const t = $("#toast"); t.textContent = msg; t.classList.add("show");
-  clearTimeout(toastTimer); toastTimer = setTimeout(() => t.classList.remove("show"), 1800);
+  clearTimeout(toastTimer); toastTimer = setTimeout(() => t.classList.remove("show"), 2600);
 }
 // A table row that acts like a button: mouse, Enter and Space.
 function clickRow(fn, attrs, ...cells){
@@ -252,21 +310,55 @@ function table(heads, rows, empty){
   return el("table", {}, el("thead", {}, el("tr", {}, heads.map(h => el("th", {class: h.num ? "num" : ""}, h.t)))), el("tbody", {}, rows));
 }
 const share = (c, max) => `--p:${Math.round(c / Math.max(1, max) * 100)}%`;
-const domCell = (r, max) => el("td", {class:"mono" + (max ? " barcell" : ""), style: max ? share(r.c, max) : null}, r.name, r.svc ? el("span", {class:"svc"}, r.svc) : null);
-// Lookups rolled up into plain-English categories. What people did first, background chatter after.
-function activityList(acts){
-  const total = acts.reduce((a, c) => a + c.c, 0);
-  if (!total) return null;
-  const pct = c => { const p = c / total * 100; return p < 1 ? "<1%" : Math.round(p) + "%"; };
-  const row = a => el("div", {class:"act-row barcell" + (a.background ? " bg" : ""), style:share(a.c, total), title:fmt(a.c) + " lookups"},
-    el("div", {class:"what"}, el("span", {class:"cat"}, a.cat === "Other" ? "Other sites" : a.cat), a.services.length ? el("span", {class:"svcs"}, " · " + a.services.join(", ")) : null),
-    el("div", {class:"num"}, pct(a.c)));
-  const fg = acts.filter(a => !a.background), bg = acts.filter(a => a.background);
-  return el("div", {class:"acts"},
-    fg.length ? [el("h3", {}, "Activity, by share of lookups"), fg.map(row)] : null,
-    bg.length ? [el("h3", {style: fg.length ? "margin-top:8px" : null}, fg.length ? "Background and uncategorized" : "Only background and uncategorized lookups"), bg.map(row)] : null);
+
+// ---- devices: names and icons ---------------------------------------------
+// A label or hostname is a real name. Failing that, the server's guess from the device's lookups, then the maker.
+const devName = d => d.label || d.hostname || d.hint || d.vendor || "Unknown device";
+const isGuess = d => !d.label && !d.hostname && !!d.hint;
+const isUnnamed = d => !d.label && !d.hostname;
+const isReal = d => !d.mac.startsWith("ip:");
+const isSilent = d => isReal(d) && d.online && !d.queries && !d.infra;
+// Static drawings only: nothing from the network is ever put through innerHTML.
+const ICONS = {
+  phone:'<rect x="6" y="2" width="8" height="16" rx="2"/><path d="M9 15.5h2"/>',
+  tablet:'<rect x="4" y="2" width="12" height="16" rx="2"/><path d="M9 15.5h2"/>',
+  computer:'<rect x="3" y="4" width="14" height="9" rx="1"/><path d="M1.5 16h17"/>',
+  tv:'<rect x="2" y="4" width="16" height="10" rx="1"/><path d="M7 17h6"/>',
+  console:'<rect x="2" y="6" width="16" height="9" rx="4.5"/><path d="M6 9.5v2M5 10.5h2M13.5 10.5h.01"/>',
+  speaker:'<rect x="6" y="2" width="8" height="16" rx="2"/><circle cx="10" cy="12" r="2.2"/><path d="M10 6h.01"/>',
+  home:'<path d="M3 9.5 10 3l7 6.5V17H3z"/><path d="M8.5 17v-4h3v4"/>',
+  printer:'<path d="M6 7V2.5h8V7"/><rect x="3" y="7" width="14" height="7" rx="1"/><path d="M6 12h8v5.5H6z"/>',
+  router:'<rect x="2" y="11" width="16" height="5" rx="1"/><path d="M6 11V5M14 11V5M5.5 13.5h.01"/>',
+  camera:'<rect x="2" y="6" width="11" height="8" rx="1"/><path d="m13 9 5-3v8l-5-3z"/>',
+  unknown:'<circle cx="10" cy="10" r="8"/><path d="M7.8 8a2.2 2.2 0 1 1 3.3 1.9c-.7.4-1.1.9-1.1 1.7M10 14.4h.01"/>',
+};
+const KINDS = [
+  ["router", /router|gateway|access point|mesh|netgear|eero|unifi|ubiquiti|orbi/],
+  ["tv", /\btv\b|television|roku|chromecast|fire ?stick/],
+  ["console", /xbox|playstation|\bps[45]\b|nintendo|console/],
+  ["camera", /camera|\bcam\b|doorbell|\bring\b|wyze|arlo|eufy/],
+  ["printer", /printer|epson/],
+  ["speaker", /speaker|sonos|\becho\b|alexa|homepod/],
+  ["home", /plug|bulb|light|lamp|thermostat|tuya|kasa|\bhue\b|vacuum|roomba|smart|nest|ecobee|espressif/],
+  ["tablet", /ipad|tablet|kindle/],
+  ["phone", /phone|pixel|galaxy/],
+  ["computer", /laptop|desktop|\bpc\b|macbook|imac|\bmac\b|computer|server|\bnas\b|raspberry|\bpi\b|windows|linux/],
+];
+function kindOf(d){
+  const pick = t => { t = t.toLowerCase(); const k = KINDS.find(([, re]) => re.test(t)); return k && k[0]; };
+  const named = pick([d.label, d.hostname].join(" "));
+  if (named) return named;
+  if (/^(Apple device|Android)/.test(d.hint || "")) return "phone";   // the guess lists several things; a phone is the likeliest
+  return pick([d.hint, d.vendor].join(" ")) || "unknown";
+}
+function icon(d, big){
+  const svg = document.createElementNS(SVG, "svg");
+  svg.setAttribute("viewBox", "0 0 20 20"); svg.setAttribute("aria-hidden", "true");
+  svg.innerHTML = ICONS[kindOf(d)];
+  return el("span", {class:"ico" + (d.online ? " on" : ""), title: d.online ? "Online" : "Offline", style: big ? "width:42px;height:42px" : null}, svg);
 }
 
+// ---- activity --------------------------------------------------------------
 function chart(points, hours){
   // One bar per hour up to 14 days, then wider buckets. Gaps are filled so quiet hours show as empty slots.
   const now = Math.floor(Date.now()/1000), end = now - now % 3600 + 3600, by = new Map(points.map(p => [p.hour, p.c]));
@@ -276,27 +368,113 @@ function chart(points, hours){
     bars.push({t, c});
   }
   const max = Math.max(1, ...bars.map(b => b.c)), total = bars.reduce((a, b) => a + b.c, 0);
-  const per = stepH > 1 ? ` per ${stepH}h` : "/h";
-  const idle = `${fmt(total)} lookups · peak ${fmt(max)}${per}`;
+  const idle = total ? `When it was active · ${fmt(total)} lookups, busiest ${stepH > 1 ? stepH + " hours" : "hour"} ${fmt(max)}` : "When it was active";
   const readout = el("div", {class:"readout"}, idle);
-  const box = el("div", {class:"chart" + (n > 100 ? " dense" : ""), role:"img", "aria-label":`Lookups over time: ${idle}`},
+  const box = el("div", {class:"chart" + (n > 100 ? " dense" : ""), role:"img", "aria-label":idle},
     bars.map(b => el("div", {onmouseenter:() => readout.textContent = `${hourLabel(b.t)}${stepH > 1 ? ` (+${stepH}h)` : ""}: ${fmt(b.c)} lookups`},
       el("i", {style:`height:${b.c ? `max(2px,${b.c/max*100}%)` : "0"}`}))),
-    total ? null : el("div", {class:"none"}, "No lookups in this period"));
+    total ? null : el("div", {class:"none"}, "Nothing seen in this period"));
   box.addEventListener("mouseleave", () => readout.textContent = idle);
   return el("div", {}, readout, box, el("div", {class:"axis"}, el("span", {}, hourLabel(bars[0].t)), el("span", {}, "now")));
 }
+const lowerFirst = t => /^[A-Z][a-z]/.test(t) ? t[0].toLowerCase() + t.slice(1) : t;
+const catName = c => c === "Other" ? "Other sites" : c;
+// Lookups rolled up into plain-English categories. What people did first, background chatter after.
+function activityList(acts){
+  const total = acts.reduce((a, c) => a + c.c, 0);
+  if (!total) return null;
+  const pct = c => { const p = c / total * 100; return p < 1 ? "<1%" : Math.round(p) + "%"; };
+  const row = a => el("div", {class:"act-row barcell" + (a.background ? " bg" : ""), style:share(a.c, total), title:fmt(a.c) + " lookups"},
+    el("div", {class:"what"}, el("span", {class:"cat"}, catName(a.cat)), a.services.length ? el("span", {class:"svcs"}, " · " + a.services.join(", ")) : null),
+    el("div", {class:"num"}, pct(a.c)));
+  const fg = acts.filter(a => !a.background), bg = acts.filter(a => a.background);
+  return el("div", {class:"acts"},
+    fg.length ? fg.map(row) : null,
+    bg.length ? [el("h4", {style: fg.length ? "margin-top:10px" : null, title:"Things devices do on their own (updates, sync, ads), plus sites netinv does not recognise"}, "Background and unrecognised"), bg.map(row)] : null);
+}
+// One sentence a person can read without knowing what a lookup is.
+function sentence(acts){
+  if (!acts.length) return "Nothing seen from this device in this period.";
+  const fg = acts.filter(a => !a.background).slice(0, 2);
+  if (!fg.length) return acts[0].cat === "Other" ? "Only sites netinv does not recognise. The list below is the best clue." : "Only background chatter (updates, sync, ads). Nobody seems to be using it.";
+  return "Mostly " + fg.map(a => lowerFirst(catName(a.cat)) + (a.services.length ? ` (${a.services.slice(0, 3).join(", ")})` : "")).join(" and ") + ".";
+}
 
-let devices = [], selected = null, range = 24, group = "base", tab = "devices";
+let devices = [], byMac = new Map(), selected = null, range = 24, group = "base", tab = "devices";
 let filter = "all", sort = {key:null, dir:1}, liveRows = [], livePaused = false, labelInput = null;
+let blocked = new Set(), canBlock = false, attention = [], attnSeen = "", attnAll = false, techOpen = false;
 
-// ---- summary ---------------------------------------------------------------
+// ---- blocking --------------------------------------------------------------
+function blockedBy(name){
+  for (let n = name; n; n = n.includes(".") ? n.slice(n.indexOf(".") + 1) : "") if (blocked.has(n)) return n;
+  return null;
+}
+const UNDO = "It can take a few minutes to take effect. You can undo it on the Blocked tab.";
+// target: a site address, {service:"TikTok"} for everything that service uses, or a list of either.
+async function setBlock(target, on, question){
+  const list = [].concat(target), label = list[0].service || list[0];
+  if (on && !confirm(question || (list[0].service
+      ? `Block ${label} for every device on your network?\n\nThis blocks every address netinv knows ${label} uses. ${UNDO}`
+      : `Block ${label} for every device on your network?\n\nEverything under it (like www.${label}) is blocked too. ${UNDO}`))) return false;
+  for (const t of list) {
+    const r = await post("/api/block", t.service ? {service:t.service, on} : {domain:t, on});
+    if (!r.ok) { toast(r.error); return false; }
+  }
+  toast(on ? `${label} is now blocked` : `${label} is no longer blocked`);
+  await refresh();
+  if ($("#domres table")) searchDomain(null, true);
+  return true;
+}
+// The Block / Unblock control at the end of a site row. Takes a row ({name, svc, whole, risky}) or a bare address.
+function blockCell(r){
+  if (typeof r === "string") r = {name:r};
+  if (!canBlock) return el("td", {class:"fit"});
+  const name = r.name, by = blockedBy(name), stop = fn => e => { e.stopPropagation(); fn(); };
+  if (by) return el("td", {class:"fit"},
+    el("span", {class:"tag bad", title: by === name ? "Blocked for the whole network" : `Blocked because ${by} is blocked`}, "blocked"),
+    by === name ? [" ", el("button", {class:"mini", onclick:stop(() => setBlock(name, false))}, "Unblock")] : null);
+  const go = r.whole ? () => setBlock({service:r.svc}, true)
+    : r.risky ? () => setBlock(name, true, `${name} belongs to ${r.svc}. Devices rely on it for updates, sign-in and syncing, so blocking it can break them.\n\nBlock it anyway, for every device on your network?`)
+    : () => setBlock(name, true);
+  return el("td", {class:"fit"}, el("button", {class:"mini", title: r.whole ? `Stop every device on the network from using ${r.svc}` : `Stop every device on the network from reaching ${name}`, onclick:stop(go)}, "Block"));
+}
+// Service name first when we know it, the raw address after.
+const siteCell = (r, max) => el("td", {class:"site" + (max ? " barcell" : ""), style: max ? share(r.c, max) : null},
+  r.svc ? [r.svc, el("span", {class:"d mono"}, r.name)] : el("span", {class:"mono"}, r.name));
+
+async function loadBlocked(){
+  const b = await api("/api/blocked");
+  $("#blockoff").hidden = b.enabled;
+  $("#blockq").disabled = $("#blockform button").disabled = !b.enabled;
+  // A blocked service is many addresses; show it as the one thing the person blocked.
+  const groups = new Map();
+  for (const r of b.rows) {
+    const k = r.whole ? "svc:" + r.svc : r.domain, g = groups.get(k) || {svc: r.whole ? r.svc : "", doms: [], added: r.added, c: 0};
+    g.doms.push(r.domain); g.c += r.c; g.added = Math.min(g.added, r.added); groups.set(k, g);
+  }
+  fill($("#blockrows"), table([{t:"Blocked"},{t:"Since"},{t:"Tried in the last 24 hours",num:1},{t:""}],
+    [...groups.values()].map(g => el("tr", {},
+      el("td", {class:"site"}, g.svc ? [el("b", {}, g.svc), el("span", {class:"d"}, g.doms.length === 1 ? g.doms[0] : `${g.doms.length} addresses`)] : el("span", {class:"mono"}, g.doms[0])),
+      el("td", {}, new Date(g.added*1000).toLocaleDateString()),
+      el("td", {class:"num"}, g.c ? `${fmt(g.c)} time${g.c === 1 ? "" : "s"}` : "not tried"),
+      el("td", {class:"fit"}, el("button", {class:"ghost", onclick:() => setBlock(g.svc ? {service:g.svc} : g.doms[0], false)}, "Unblock")))),
+    b.enabled ? "Nothing is blocked. Block a site here, or use the Block button next to any site on the other tabs." : ""));
+}
+$("#blockform").addEventListener("submit", async e => {
+  e.preventDefault();
+  const v = $("#blockq").value.trim();
+  if (!v) return;
+  await setBlock(v, true);
+  $("#blockq").value = "";
+});
+
+// ---- summary and the Activity tab -----------------------------------------
 const TILES = [
-  ["total", "devices seen", () => showDevices("all")],
+  ["total", "devices found", () => showDevices("all")],
   ["online", "online now", () => showDevices("online")],
-  ["unknown", "not yet reviewed", () => showDevices("new")],
-  ["queries", "DNS lookups, 24h", () => setTab("domains")],
-  ["domains", "distinct domains, 24h", () => setTab("domains")],
+  ["unknown", "new, not reviewed", () => showDevices("new")],
+  ["queries", "lookups in 24 hours", () => setTab("activity")],
+  ["domains", "sites contacted", () => setTab("activity")],
 ];
 $("#tiles").append(...TILES.map(([k, label, go]) => el("button", {class:"card tile", id:"tile-" + k, onclick:go}, el("b", {}, "–"), el("span", {}, label))));
 function showDevices(f){ filter = f; $("#devfilter").value = ""; setTab("devices"); renderDevices(); }
@@ -304,30 +482,99 @@ function showDevices(f){ filter = f; $("#devfilter").value = ""; setTab("devices
 async function loadSummary(){
   const s = await api("/api/summary");
   $("#sdot").className = "dot on"; $("#status").classList.remove("bad");
-  $("#stext").textContent = s.last_scan ? "last scan " + ago(s.last_scan) : "waiting for first scan";
+  $("#stext").textContent = s.last_scan ? "network checked " + ago(s.last_scan) : "first network check in progress";
+  blocked = new Set(s.blocked); canBlock = s.can_block;
   for (const [k] of TILES) $("#tile-" + k + " b").textContent = fmt(s[k]);
   $("#tile-unknown").classList.toggle("alert", s.unknown > 0);
-  if (tab !== "domains") return;
-  $("#netchart").replaceChildren(chart(s.hourly, 24));
-  $("#netacts").replaceChildren(activityList(s.activity) || el("div", {class:"empty"}, "No lookups logged in the last 24h."));
+  if (tab !== "activity") return;
+  fill($("#netchart"), chart(s.hourly, 24));
+  fill($("#netacts"), activityList(s.activity) || el("div", {class:"empty"}, "Nothing seen in the last 24 hours."));
   const maxTop = Math.max(1, ...s.top.map(r => r.c));
-  $("#top").replaceChildren(table([{t:"Domain"},{t:"Devices",num:1},{t:"Lookups",num:1}],
-    s.top.map(r => clickRow(() => searchDomain(r.name), {}, domCell(r, maxTop), el("td", {class:"num"}, r.devs), el("td", {class:"num"}, fmt(r.c)))),
-    "No lookups logged in the last 24h."));
-  $("#fresh").replaceChildren(table([{t:"Domain"},{t:"Devices",num:1},{t:"First seen",num:1}],
-    s.fresh.map(r => clickRow(() => searchDomain(r.name), {}, domCell(r), el("td", {class:"num"}, r.devs), el("td", {class:"num"}, hourLabel(r.first)))),
-    "No new domains in the last 24h."));
+  fill($("#top"), table([{t:"Site"},{t:"Devices",num:1},{t:"Lookups",num:1},{t:""}],
+    s.top.map(r => clickRow(() => searchDomain(r.name), {}, siteCell(r, maxTop), el("td", {class:"num"}, r.devs), el("td", {class:"num"}, fmt(r.c)), blockCell(r))),
+    "Nothing seen in the last 24 hours."));
+  fill($("#fresh"), table([{t:"Site"},{t:"Devices",num:1},{t:"First seen",num:1},{t:""}],
+    s.fresh.map(r => clickRow(() => searchDomain(r.name), {}, siteCell(r), el("td", {class:"num"}, r.devs), el("td", {class:"num"}, hourLabel(r.first)), blockCell(r))),
+    "No new sites in the last 24 hours."));
 }
 
-// ---- devices ---------------------------------------------------------------
+// ---- needs attention -------------------------------------------------------
+async function loadAttention(){ attention = await api("/api/attention"); }
+async function dismiss(key){
+  const r = await post("/api/dismiss", {key});
+  if (!r.ok) { toast(r.error); return; }
+  attnSeen = ""; await refresh();
+}
+function attnRow(it){
+  const d = byMac.get(it.mac);
+  if (!d) return null;
+  const n = devName(d), where = d.ip ? ` at ${d.ip}` : "";
+  const view = el("button", {class:"ghost", onclick:() => openDevice(d.mac)}, "View device");
+  const ignore = el("button", {class:"ghost", title:"Do not show this again", onclick:() => dismiss(it.key)}, "Ignore");
+  let title, text, btns;
+  if (it.kind === "new") {
+    title = isUnnamed(d) ? (isGuess(d) ? `New device, probably: ${n}` : "New device netinv cannot identify") : `New device: ${n}`;
+    text = `First seen ${ago(d.first_seen)}${where}.` + (d.vendor ? ` Made by ${d.vendor}.` : "") + " Is it yours?";
+    btns = [el("button", {class:"act", onclick:() => openDevice(d.mac, true)}, "Name it"),
+            el("button", {class:"ghost", title:"Mark it as reviewed without naming it", onclick:() => update(d.mac, {known:true}, "Marked as reviewed")}, "It's fine")];
+  } else if (it.kind === "silent") {
+    title = `${n} is online but netinv sees nothing from it`;
+    text = "It is probably using its own DNS or a VPN, so what it does is invisible here.";
+    btns = [view, ignore];
+  } else if (it.kind === "hidden") {
+    const relay = it.services.includes("iCloud Private Relay") && !blockedBy("mask.icloud.com");
+    title = `${n} hides part of what it does`;
+    text = `It uses ${it.services.join(", ")}.` + (relay && canBlock ? " You can turn Private Relay off for this network; Apple devices then fall back to normal lookups." : "");
+    btns = [relay && canBlock ? el("button", {class:"act", onclick:async () => { if (await setBlock(["mask.icloud.com", "mask-h2.icloud.com"], true,
+      "Turn off iCloud Private Relay on this network?\n\nApple devices will show a notice that Private Relay is unavailable here, and their activity becomes visible in netinv. This applies to every Apple device on the network.")) dismiss(it.key); }}, "Turn off Private Relay") : null, view, ignore];
+  } else {
+    title = `${n}: ${it.pct}% of what it does is ads and tracking`;
+    text = `Mostly ${it.services.join(", ")}.` + (canBlock ? " You can block it for the whole network." : "");
+    btns = [canBlock ? el("button", {class:"act", onclick:async () => { if (await setBlock(it.services.map(service => ({service})), true,
+      `Block ${it.services.join(", ")} for every device on your network?\n\nThose ads and trackers stop loading everywhere. Now and then a site or app that depends on them misbehaves. ${UNDO}`)) dismiss(it.key); }}, "Block the tracking") : null, view, ignore];
+  }
+  return el("div", {class:"attn-row"}, icon(d), el("div", {class:"txt"}, el("b", {}, title), el("span", {}, text)), el("div", {class:"btns"}, btns));
+}
+function renderAttention(){
+  // Rebuilding would steal keyboard focus from these buttons every refresh, so only do it when something changed.
+  const sig = JSON.stringify([attention, attention.map(i => { const d = byMac.get(i.mac); return d && [devName(d), d.ip, d.online]; }), [...blocked], canBlock, attnAll]);
+  const badge = $("#navn"); badge.hidden = !attention.length; badge.textContent = attention.length;
+  if (sig === attnSeen) return;
+  attnSeen = sig;
+  const box = $("#attn"); box.hidden = false;
+  box.classList.toggle("clear", !attention.length);
+  if (!attention.length) { fill(box, "✓ Nothing needs your attention right now."); return; }
+  // On a fresh install every device is new: one row for the lot instead of a wall of them.
+  const news = attention.filter(i => i.kind === "new").map(i => byMac.get(i.mac)).filter(Boolean);
+  const rest = news.length > 2 ? attention.filter(i => i.kind !== "new") : attention;
+  const crowd = news.length > 2 ? el("div", {class:"attn-row"}, el("div", {class:"txt"},
+      el("b", {}, `${news.length} new devices to check`),
+      el("span", {}, `${news.slice(0, 3).map(devName).join(", ")}${news.length > 3 ? ` and ${news.length - 3} more` : ""}. Name the ones you recognise; anything you cannot place deserves a closer look.`)),
+    el("div", {class:"btns"}, el("button", {class:"act", onclick:() => openDevice(news[0].mac, true)}, "Go through them"),
+      el("button", {class:"ghost", onclick:() => reviewAll(news)}, "They're all fine"))) : null;
+  const shown = attnAll ? rest : rest.slice(0, 4);
+  fill(box, el("h2", {}, `Needs your attention (${attention.length})`),
+    el("p", {class:"mute", style:"margin-bottom:6px"}, "Deal with each one, or ignore it and it will not come back."),
+    crowd, shown.map(attnRow),
+    rest.length > shown.length ? el("div", {class:"attn-row"}, el("button", {class:"link", onclick:() => { attnAll = true; renderAttention(); }}, `Show ${rest.length - shown.length} more`)) : null);
+}
+async function reviewAll(list){
+  if (!confirm(`Mark all ${list.length} new devices as reviewed?\n\nOnly do this if you recognise them all. You can still name them afterwards.`)) return;
+  for (const d of list) await post("/api/device", {mac:d.mac, known:true});
+  attnSeen = ""; await refresh();
+  if (selected) await renderDetail();
+  toast(`${list.length} devices marked as reviewed`);
+}
+
+// ---- device list -----------------------------------------------------------
 const FILTERS = {all:() => true, online:d => d.online, new:d => !d.known, silent:isSilent};
-const ipNum = ip => ip && /^\d+(\.\d+){3}$/.test(ip) ? ip.split(".").reduce((a, o) => a*256 + +o, 0) : Infinity;
 const SORTS = {
-  name:[d => devName(d).toLowerCase(), 1], ip:[d => ipNum(d.ip), 1], mostly:[d => (d.mostly || "￿").toLowerCase(), 1],
+  name:[d => devName(d).toLowerCase(), 1], mostly:[d => (d.mostly || "￿").toLowerCase(), 1],
   queries:[d => d.queries, -1], seen:[d => d.last_seen || 0, -1],
 };
 async function loadDevices(){
   devices = await api("/api/devices");
+  byMac = new Map(devices.map(d => [d.mac, d]));
   renderDevices();
 }
 function renderDevices(){
@@ -345,22 +592,21 @@ function renderDevices(){
     list = list.slice().sort((a, b) => { const x = get(a), y = get(b); return (x < y ? -1 : x > y ? 1 : 0) * sort.dir; });
   }
   const focused = document.activeElement && document.activeElement.dataset ? document.activeElement.dataset.mac : null;
-  const rows = list.map(d =>
-    clickRow(() => select(d.mac), {class: d.mac === selected ? "sel" : "", "data-mac":d.mac, "aria-selected": d.mac === selected ? "true" : null},
-      el("td", {}, el("span", {class:"dot" + (d.online ? " on" : ""), role:"img", "aria-label": d.online ? "online" : "offline", title: d.online ? "online" : "offline"}), devName(d),
-        isGuess(d) ? el("span", {class:"tag", title:GUESS_TIP}, "guess") : null,
-        d.known ? null : el("span", {class:"tag new"}, "new"),
-        d.randomized ? el("span", {class:"tag", title:"Locally administered (private/randomized) MAC address"}, "private MAC") : null,
-        isSilent(d) ? el("span", {class:"tag", title:"Online but no DNS lookups in 24h: may be bypassing the Pi's DNS"}, "no lookups") : null,
-        d.hidden ? el("span", {class:"tag", title:"Uses a VPN, iCloud Private Relay or encrypted DNS: part of what it does is not visible here"}, "partly hidden") : null,
-        (sub => el("div", {class:"sub"}, d.ip ? el("span", {class:"only-s"}, d.ip + (sub ? " · " : "")) : null, sub))(d.vendor || (isReal(d) ? "" : "MAC not seen"))),
-      el("td", {class:"mono nowrap hide-s"}, d.ip || ""),
-      el("td", {class: d.mostly ? "" : "mute"}, d.mostly || (d.queries ? "" : "–")),
+  const rows = list.map(d => {
+    const name = devName(d);
+    const sub = [isGuess(d) ? "guessed from its activity" : null, d.vendor && d.vendor !== name ? d.vendor : null, d.ip, isReal(d) ? null : "seen only by its lookups"].filter(Boolean).join(" · ");
+    return clickRow(() => select(d.mac), {class: d.mac === selected ? "sel" : "", "data-mac":d.mac, "aria-selected": d.mac === selected ? "true" : null},
+      el("td", {}, el("div", {class:"dev"}, icon(d), el("div", {},
+        el("div", {class:"nm"}, name, d.known ? null : el("span", {class:"tag new"}, "new")),
+        el("div", {class:"sub"}, sub)))),
+      el("td", {class: d.mostly ? "" : "mute"}, d.mostly || (isSilent(d) ? "Nothing visible" : d.infra ? "Runs the network" : "–"),
+        d.hidden ? el("span", {class:"tag", title:"Uses a VPN, iCloud Private Relay or private DNS: part of what it does is not visible"}, "partly hidden") : null),
       el("td", {class:"num hide-s"}, fmt(d.queries)),
-      el("td", {class:"num"}, ago(d.last_seen))));
-  const none = !devices.length ? "No devices yet. The first scan runs at startup." : "No devices match.";
-  $("#devrows").replaceChildren(...(rows.length ? rows : [el("tr", {}, el("td", {colspan:5, class:"empty"}, none,
-    devices.length && (f || filter !== "all") ? [" ", el("button", {class:"link", onclick:() => showDevices("all")}, "Show all")] : null))]));
+      el("td", {class:"num"}, d.online ? "online" : ago(d.last_seen)));
+  });
+  const none = !devices.length ? "No devices yet. The first check of your network is still running." : "No devices match.";
+  fill($("#devrows"), rows.length ? rows : el("tr", {}, el("td", {colspan:4, class:"empty"}, none,
+    devices.length && (f || filter !== "all") ? [" ", el("button", {class:"link", onclick:() => showDevices("all")}, "Show all")] : null)));
   if (focused) { const r = rows.find(r => r.dataset.mac === focused); if (r) r.focus(); }
 }
 for (const b of document.querySelectorAll("#chips button")) b.addEventListener("click", () => { filter = b.dataset.f; renderDevices(); });
@@ -371,19 +617,26 @@ for (const th of document.querySelectorAll("th[data-sort]")) th.querySelector("b
   renderDevices();
 });
 
+// ---- device detail ---------------------------------------------------------
 async function update(mac, patch, msg){
-  try {
-    const r = await fetch("/api/device", {method:"POST", headers:{"Content-Type":"application/json"}, body:JSON.stringify({mac, ...patch})});
-    if (!r.ok) throw new Error(r.status);
-  } catch (e) { toast("Could not save"); return; }
+  const r = await post("/api/device", {mac, ...patch});
+  if (!r.ok) { toast(r.error); return; }
   labelInput = null;
-  await Promise.all([loadDevices(), loadSummary()]);
+  await refresh();
   await renderDetail();
   toast(msg);
 }
+async function forget(d){
+  if (!confirm(`Forget ${devName(d)}?\n\nThis removes it and its history from netinv. It does not disconnect it: if it is still on your network it will show up again as a new device.`)) return;
+  const r = await post("/api/forget", {mac:d.mac});
+  if (!r.ok) { toast(r.error); return; }
+  deselect(); attnSeen = ""; await refresh(); toast("Device forgotten");
+}
 function select(mac, scroll = true){
-  selected = mac; syncHash(); renderDevices(); renderDetail();
+  selected = mac; syncHash(); renderDevices();
+  const done = renderDetail();
   if (mac && scroll && narrow()) $("#detail").scrollIntoView({behavior:"smooth", block:"start"});
+  return done;
 }
 function deselect(){
   const mac = selected; selected = null; labelInput = null; syncHash();
@@ -392,84 +645,95 @@ function deselect(){
   const r = [...$("#devrows").children].find(r => r.dataset.mac === mac);
   if (r) { r.focus(); if (narrow()) r.scrollIntoView({block:"center"}); }
 }
+const TYPES = ["Phone", "Laptop", "Tablet", "TV", "Speaker", "Camera", "Smart plug", "Printer", "Game console"];
 function detailHead(d){
-  const real = isReal(d);
+  const real = isReal(d), unnamed = isUnnamed(d);
   // Naming a device is reviewing it: one step instead of two.
-  const save = () => { const label = labelInput.value.trim(); update(d.mac, label ? {label, known:true} : {label}, label ? "Label saved" : "Label cleared"); };
+  const save = () => { const label = labelInput.value.trim(); update(d.mac, label ? {label, known:true} : {label}, label ? "Name saved" : "Name cleared"); };
   const todo = devices.filter(x => !x.known && x.mac !== d.mac);
-  labelInput = el("input", {type:"text", value:d.label || "", maxlength:80, placeholder:"Label, e.g. Living room TV", "aria-label":"Device label",
+  labelInput = el("input", {type:"text", value:d.label || "", maxlength:80, placeholder:"e.g. Sam's phone, Living room TV", "aria-label":"Device name",
     onkeydown:e => { if (e.key === "Enter") save(); }});
+  const nameRow = el("div", {class:"row", style:"margin:0"}, labelInput, el("button", {class:"act", onclick:save}, unnamed ? "Save name" : "Rename"));
   const row = (k, v, mono) => v ? [el("dt", {}, k), el("dd", {class: mono ? "mono" : ""}, v)] : null;
+  const tech = el("details", {open: techOpen, ontoggle:e => techOpen = e.currentTarget.open}, el("summary", {}, "Technical details"),
+    el("dl", {}, row("IP address", d.ip, 1), row("IPv6 address", d.ip6, 1),
+      row("Hardware address (MAC)", real ? d.mac + (d.randomized ? "  (private: made up by the device for this network)" : "") : "not seen", 1),
+      row("Name it reports", d.hostname), row("Maker", d.vendor), row("Looks like", d.hint),
+      row("First seen", real && d.first_seen ? new Date(d.first_seen*1000).toLocaleString([], {dateStyle:"medium", timeStyle:"short"}) : null)));
   return [
-    el("div", {class:"dtitle"}, el("h2", {}, devName(d)),
-      d.known ? null : el("span", {class:"tag new"}, "new"),
+    el("div", {class:"dtitle"}, icon(d, true),
+      el("div", {}, el("h2", {}, devName(d), d.known ? null : el("span", {class:"tag new"}, "new")),
+        el("div", {class:"dstate"}, d.online ? "Online now" : "Offline, last seen " + ago(d.last_seen), isGuess(d) ? " · name is a guess" : "")),
       el("button", {class:"x", "aria-label":"Close device details", title:"Close", onclick:deselect}, "×")),
-    el("div", {class:"dstate"}, el("span", {class:"dot" + (d.online ? " on" : "")}), d.online ? "Online now" : "Last seen " + ago(d.last_seen)),
-    el("dl", {}, row("IP", d.ip, 1), row("IPv6", d.ip6, 1), row("MAC", real ? d.mac + (d.randomized ? " (private)" : "") : null, 1),
-      row("Hostname", d.hostname), row("Vendor", d.vendor), row("Looks like", d.hint),
-      row("First seen", real && d.first_seen ? new Date(d.first_seen*1000).toLocaleDateString() : null)),
-    real && isUnnamed(d) ? el("div", {class:"note info"}, "This device has not reported a name. ",
-      d.hint ? `Its lookups suggest: ${d.hint}. ` : "The domains below are the best clue to what it is. ",
-      d.randomized ? "It uses a private MAC, which is typical of phones, tablets and laptops; the address above is shown in that device's Wi-Fi settings for this network. "
-                   : "The MAC address above is usually printed on the device or shown in its network settings. ",
-      "Once you know what it is, give it a label.") : null,
-    real ? el("div", {class:"row"}, labelInput,
-      el("button", {class:"act", onclick:save}, "Save"),
-      el("button", {class:"ghost", onclick:() => update(d.mac, {known: !d.known}, d.known ? "Marked as not reviewed" : "Marked as reviewed")}, d.known ? "Mark as not reviewed" : "Mark as reviewed"),
-      todo.length ? el("button", {class:"ghost", title:"Open the next device you have not reviewed", onclick:() => select(todo[0].mac, false)}, `Next to review (${todo.length}) →`) : null) : null,
-    isSilent(d) ? el("div", {class:"note"}, "Online, but no lookups in the last 24h. It may use encrypted or hard-coded DNS and bypass the Pi.") : null,
+    !real ? el("p", {class:"mute", style:"margin-top:12px"}, "netinv saw lookups from this address but never matched it to a device, so it cannot be named.") : null,
+    real && unnamed ? el("div", {class:"ask"}, el("h3", {}, "What is this device?"),
+      el("p", {}, d.hint ? `It did not give a name. From what it does, it looks like: ${d.hint}. ` : "It did not give a name, and what it does is not enough to guess. ",
+        d.randomized ? "To be sure, open Wi-Fi settings on the device you suspect and compare its Wi-Fi address with the hardware address under Technical details. "
+                     : "To be sure, compare the hardware address under Technical details with the one printed on the device or shown in its network settings. ",
+        "Or switch a device's Wi-Fi off and see whether this one goes offline."),
+      el("div", {class:"chips"}, TYPES.map(t => el("button", {title:`Start the name with "${t}"`, onclick:() => { labelInput.value = t; labelInput.focus(); }}, t))),
+      nameRow) : null,
+    real && !unnamed ? el("div", {style:"margin-top:12px"}, nameRow) : null,
+    el("div", {class:"row", style:"margin:10px 0 0"},
+      real ? el("button", {class:"ghost", onclick:() => update(d.mac, {known: !d.known}, d.known ? "Marked as new again" : "Marked as reviewed")}, d.known ? "Mark as new again" : "Mark as reviewed") : null,
+      todo.length ? el("button", {class:"ghost", title:"Open the next device you have not reviewed", onclick:() => select(todo[0].mac, false)}, `Next new device (${todo.length}) →`) : null,
+      el("button", {class:"link danger spacer", title:"Remove this device and its history from netinv", onclick:() => forget(d)}, "Forget device")),
+    tech,
   ];
 }
 // refresh=true is the background tick: leave anything the user is interacting with alone.
 async function renderDetail(refresh){
-  const d = devices.find(x => x.mac === selected);
+  const d = byMac.get(selected);
   if (!d) return;
   let data;
   try { data = await api(`/api/device?mac=${encodeURIComponent(d.mac)}&hours=${range}&group=${group}`); } catch (e) { return; }
   if (selected !== d.mac) return;
-  const head = $("#dhead"), segs = $("#dseg");
+  const head = $("#dhead"), body = $("#dbody");
   const busy = refresh && labelInput && labelInput.isConnected && (head.contains(document.activeElement) || labelInput.value !== (d.label || ""));
-  if (!busy) head.replaceChildren(...detailHead(d).filter(Boolean));
-  if (!refresh || !segs.contains(document.activeElement)) {
-    const seg = (label, opts, cur, set) => el("span", {class:"seg", role:"group", "aria-label":label}, opts.map(([v,t]) =>
-      el("button", {"aria-pressed": String(v === cur), "data-v":v, onclick:async () => { set(v); await renderDetail(); const b = segs.querySelector(`[data-v="${v}"]`); if (b) b.focus(); }}, t)));
-    segs.replaceChildren(seg("Period", [[24,"24h"],[168,"7d"],[720,"30d"]], range, v => range = v),
-      seg("Grouping", [["base","By site"],["domain","Full hostnames"]], group, v => group = v));
-  }
+  if (!busy) fill(head, detailHead(d));
+  const refocus = refresh && body.contains(document.activeElement) && document.activeElement.dataset.v;
+  const seg = (label, opts, cur, set) => el("span", {class:"seg", role:"group", "aria-label":label}, opts.map(([v,t]) =>
+    el("button", {"aria-pressed": String(v === cur), "data-v":v, onclick:async () => { set(v); await renderDetail(); const b = body.querySelector(`[data-v="${v}"]`); if (b) b.focus(); }}, t)));
+  fill($("#dseg"), seg("Period", [[24,"Last 24 hours"],[168,"7 days"],[720,"30 days"]], range, v => range = v));
   const max = Math.max(1, ...data.top.map(r => r.c));
-  $("#dact").replaceChildren(...[chart(data.hourly, range),
-    data.activity.some(a => a.cat === "VPN & encrypted DNS") ? el("div", {class:"note", style:"margin-top:12px"},
-      "This device uses a VPN, iCloud Private Relay or encrypted DNS, so part of what it does is not visible here.") : null,
+  fill($("#dact"),
+    el("p", {class:"say"}, d.infra && !data.activity.length ? "This is part of the network itself (your router, or the Pi running netinv). It does not ask netinv for addresses, so nothing shows here. That is normal."
+      : isSilent(d) && range === 24 ? "It is online, but netinv sees nothing from it. It may be using its own DNS or a VPN." : sentence(data.activity)),
+    data.activity.some(a => a.cat === "VPN & encrypted DNS") ? el("div", {class:"note"},
+      "This device uses a VPN, iCloud Private Relay or private DNS, so part of what it does is not visible here.") : null,
+    chart(data.hourly, range),
     activityList(data.activity),
-    el("div", {style:"margin-top:12px"}, table([{t:"Domain"},{t:"Lookups",num:1},{t:"Last",num:1}],
-      data.top.map(r => el("tr", {}, domCell(r, max), el("td", {class:"num"}, fmt(r.c)), el("td", {class:"num"}, ago(Math.min(r.last + 3599, Date.now()/1000))))),
-      "No lookups from this device in this period."))].filter(Boolean));
-  $("#dempty").hidden = true; $("#dbody").hidden = false;
+    data.top.length ? [el("div", {class:"sec"}, el("h3", {}, "Sites it contacted"), seg("Detail", [["base","By site"],["domain","Every address"]], group, v => group = v)),
+      table([{t:"Site"},{t:"Lookups",num:1},{t:"Last",num:1},{t:""}],
+        data.top.map(r => el("tr", {}, siteCell(r, max), el("td", {class:"num"}, fmt(r.c)), el("td", {class:"num"}, ago(Math.min(r.last + 3599, Date.now()/1000))), blockCell(r))))] : null);
+  if (refocus) { const b = body.querySelector(`[data-v="${refocus}"]`); if (b) b.focus(); }
+  $("#dempty").hidden = true; body.hidden = false;
 }
 
-// ---- domains ---------------------------------------------------------------
-async function searchDomain(q){
-  if (q) $("#domq").value = q;
+// ---- who used a site -------------------------------------------------------
+async function searchDomain(q, quiet){
+  if (q) { $("#domq").value = q; if (tab !== "activity") setTab("activity"); }
   const term = $("#domq").value.trim();
-  if (term.length < 2) { $("#domres").replaceChildren(el("div", {class:"empty"}, "Type at least 2 characters.")); return; }
+  if (term.length < 2) { fill($("#domres"), el("div", {class:"empty"}, "Type at least 2 letters.")); return; }
   let rows;
   try { rows = await api("/api/domain?q=" + encodeURIComponent(term)); } catch (e) { toast("Search failed"); return; }
-  const known = new Map(devices.map(d => [d.mac, d]));
-  $("#domres").replaceChildren(
+  fill($("#domres"),
     rows.length ? el("div", {class:"mute", style:"margin-bottom:6px"}, rows.length >= 200 ? "Showing the 200 most recent matches" : `${rows.length} match${rows.length === 1 ? "" : "es"}`) : null,
-    table([{t:"Domain"},{t:"Device"},{t:"Lookups",num:1},{t:"First",num:1},{t:"Last",num:1}],
-      rows.map(r => { const d = known.get(r.dev), name = d && isReal(d) ? devName(d) + (isUnnamed(d) && d.ip ? ` (${d.ip})` : "") : r.dev.replace(/^ip:/, "");
+    table([{t:"Address"},{t:"Device"},{t:"Lookups",num:1},{t:"First",num:1},{t:"Last",num:1},{t:""}],
+      rows.map(r => { const d = byMac.get(r.dev), name = d && isReal(d) ? devName(d) + (isUnnamed(d) && d.ip ? ` (${d.ip})` : "") : r.dev.replace(/^ip:/, "");
         return el("tr", {}, el("td", {class:"mono"}, r.domain),
-          el("td", {}, known.has(r.dev) ? el("button", {class:"link", title:"Show this device", onclick:() => openDevice(r.dev)}, name) : name),
-          el("td", {class:"num"}, fmt(r.c)), el("td", {class:"num"}, hourLabel(r.first)), el("td", {class:"num"}, hourLabel(r.last))); }),
-      `No device has looked up anything matching “${term}”.`));
-  $("#domcard").scrollIntoView({behavior:"smooth", block:"nearest"});
+          el("td", {}, d ? el("button", {class:"link", title:"Show this device", onclick:() => openDevice(r.dev)}, name) : name),
+          el("td", {class:"num"}, fmt(r.c)), el("td", {class:"num"}, hourLabel(r.first)), el("td", {class:"num"}, hourLabel(r.last)), blockCell(r.domain)); }),
+      `No device has contacted anything matching “${term}”.`));
+  if (!quiet) $("#domcard").scrollIntoView({behavior:"smooth", block:"nearest"});
 }
-function openDevice(mac){
+async function openDevice(mac, focusName){
   filter = "all"; sort = {key:null, dir:1}; $("#devfilter").value = "";
-  setTab("devices"); select(mac);
+  setTab("devices");
+  await select(mac);
   const r = [...$("#devrows").children].find(r => r.dataset.mac === mac);
   if (r && !narrow()) r.scrollIntoView({block:"nearest"});
+  if (focusName && labelInput && labelInput.isConnected) labelInput.focus({preventScroll: narrow()});
 }
 $("#domform").addEventListener("submit", e => { e.preventDefault(); searchDomain(); });
 
@@ -480,14 +744,13 @@ async function loadLive(){
 }
 function renderLive(){
   const f = $("#livefilter").value.trim().toLowerCase();
-  const known = new Set(devices.map(d => d.mac));
   const rows = liveRows.filter(r => !f || (r.name + " " + r.domain + " " + r.ip).toLowerCase().includes(f));
-  $("#livecount").textContent = (f ? `${rows.length} of ${liveRows.length}` : `${liveRows.length}`) + (livePaused ? " · paused" : " · updating");
-  $("#live").replaceChildren(table([{t:"Time"},{t:"Device"},{t:"Type"},{t:"Domain"}],
-    rows.map(r => el("tr", {}, el("td", {class:"mono nowrap"}, new Date(r.ts*1000).toLocaleTimeString()),
-      el("td", {}, known.has(r.dev) ? el("button", {class:"link", title:"Show this device", onclick:() => openDevice(r.dev)}, r.name) : r.name),
-      el("td", {class:"mono"}, r.type), el("td", {class:"mono"}, r.domain))),
-    liveRows.length ? "No lookups match." : "No lookups since netinv started."));
+  $("#livecount").textContent = (f ? `${rows.length} of ${liveRows.length}` : `latest ${liveRows.length}`) + (livePaused ? " · paused" : " · updating");
+  fill($("#live"), table([{t:"Time"},{t:"Device"},{t:"Address"},{t:""}],
+    rows.map(r => el("tr", {}, el("td", {class:"mono", style:"white-space:nowrap"}, new Date(r.ts*1000).toLocaleTimeString()),
+      el("td", {}, byMac.has(r.dev) ? el("button", {class:"link", title:"Show this device", onclick:() => openDevice(r.dev)}, r.name) : r.name),
+      el("td", {class:"mono"}, r.domain), blockCell(r.domain))),
+    liveRows.length ? "Nothing matches." : "Nothing since netinv started."));
 }
 $("#livefilter").addEventListener("input", renderLive);
 $("#livepause").addEventListener("click", e => {
@@ -498,7 +761,7 @@ $("#livepause").addEventListener("click", e => {
 });
 
 // ---- tabs and refresh ------------------------------------------------------
-const TABS = ["devices", "domains", "live"];
+const TABS = ["devices", "activity", "blocked", "live"];
 function setTab(t){
   if (!TABS.includes(t)) t = "devices";
   const changed = t !== tab; tab = t;
@@ -533,9 +796,11 @@ $("#devfilter").addEventListener("input", renderDevices);
 
 async function refresh(){
   try {
-    // devices are needed on every tab: other views link back to them
-    await Promise.all([loadSummary(), loadDevices()]);
+    // devices and the block list are needed on every tab: other views link back to them
+    await Promise.all([loadSummary(), loadDevices(), loadAttention()]);
+    renderAttention();
     if (tab === "devices" && selected) await renderDetail(true);
+    if (tab === "blocked") await loadBlocked();
     if (tab === "live" && !livePaused) await loadLive();
   } catch (e) {
     $("#sdot").className = "dot bad"; $("#status").classList.add("bad");
@@ -543,7 +808,7 @@ async function refresh(){
   }
 }
 { const h = readHash(); selected = h.t === "devices" ? h.mac : null; tab = h.t; setTab(h.t); }
-refresh().then(() => { if (selected && !devices.some(d => d.mac === selected)) { selected = null; syncHash(); } });
+refresh().then(() => { if (selected && !byMac.has(selected)) { selected = null; syncHash(); } });
 setInterval(() => { if (!document.hidden) refresh(); }, 15000);
 setInterval(() => { if (!document.hidden && tab === "live" && !livePaused) loadLive().catch(() => {}); }, 3000);
 document.addEventListener("visibilitychange", () => { if (!document.hidden) refresh(); });

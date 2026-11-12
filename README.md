@@ -6,7 +6,10 @@ Home network inventory and DNS activity, on a Raspberry Pi.
 - **Traffic (DNS level)**: the Pi runs dnsmasq as the network's DNS forwarder with query logging. netinv follows that log and attributes every lookup to a device.
 - **Dashboard**: `http://<pi-ip>:8080`. Devices, per-device domains over 24h/7d/30d, network-wide top domains, domains first seen in the last 24h, "which devices looked up X", and a live tail.
 - **What is it, what is it doing**: a device that reports no name gets a guess from its lookups ("Apple device", "Samsung TV", "Tuya-based smart plug"), marked as a guess until you label it. Lookups are rolled up into plain categories (streaming, social, gaming, smart home, ads, VPN & encrypted DNS…) per device and for the whole network. Both come from a built-in list in `netinv.py` (`FINGERPRINTS`, `SERVICES`); anything not on it shows as "Other sites". Shares are by number of lookups, not time or data.
-- **Review queue**: new devices are flagged until you label them or mark them reviewed; "Next to review" walks through the rest. "Export CSV" downloads the inventory.
+- **Needs your attention**: the first thing on the page is a short to-do list: new devices to name, devices whose activity is hidden (VPN, iCloud Private Relay, their own DNS), devices that mostly talk to ad trackers. Each item has buttons to deal with it or ignore it for good.
+- **Blocking**: every site row has a Block button, and the Blocked tab manages the list. Blocking a known service ("TikTok") blocks all the addresses netinv knows it uses. It works by making dnsmasq refuse to look the name up, so it applies to the whole network, not to one device, and a device on a VPN or its own DNS is not affected. A block can take a few minutes to bite because devices remember addresses they already looked up.
+- **Housekeeping**: "Forget device" removes a stale entry and its history; "Download list (CSV)" exports the inventory.
+- **Alerts (optional)**: install with `NOTIFY_URL=https://ntfy.sh/<a-topic-you-pick>` (or any URL that accepts a plain-text POST) to get a push message when a new device joins. The message leaves your network, so pick a topic name nobody would guess.
 
 One Python file, standard library only, one SQLite database.
 
@@ -19,7 +22,7 @@ git clone <this repo> && cd netinv
 sudo ./install.sh
 ```
 
-The installer detects the interface and router; override with `IFACE=`, `GATEWAY=`, `UPSTREAM1=`, `UPSTREAM2=`, `PORT=`. Then, on the router:
+The installer detects the interface and router; override with `IFACE=`, `GATEWAY=`, `UPSTREAM1=`, `UPSTREAM2=`, `PORT=`, `NOTIFY_URL=`. To update, `git pull` and run it again with the same overrides; your data is kept. Then, on the router:
 
 1. Give the Pi a DHCP reservation so its address never changes.
 2. Set the DHCP-advertised DNS server to the Pi's address, and only that.
@@ -49,6 +52,6 @@ journalctl -u netinv -f
 sqlite3 /var/lib/netinv/netinv.db 'select mac, ip, vendor, label from devices'
 ```
 
-Files: `/opt/netinv` (code), `/var/lib/netinv/netinv.db` (data), `/var/log/netinv/dnsmasq.log` (raw queries), `/etc/dnsmasq.d/netinv.conf`, `/etc/systemd/system/netinv.service`.
+Files: `/opt/netinv` (code), `/var/lib/netinv/netinv.db` (data), `/var/log/netinv/dnsmasq.log` (raw queries), `/var/lib/netinv-dns/blocked.conf` (block list, written by netinv, read by dnsmasq), `/etc/dnsmasq.d/netinv.conf`, `/etc/systemd/system/netinv.service`, `/etc/systemd/system/netinv-blocklist.{path,service}` (tell dnsmasq to re-read the block list when it changes).
 
 Uninstall: `sudo systemctl disable --now netinv dnsmasq`, set the router's DNS back, then remove the files above.

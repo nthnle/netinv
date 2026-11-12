@@ -13,6 +13,10 @@ SUBNET="$(python3 -c 'import ipaddress,sys; print(ipaddress.ip_interface(sys.arg
 UPSTREAM1="${UPSTREAM1:-1.1.1.1}"
 UPSTREAM2="${UPSTREAM2:-9.9.9.9}"
 PORT="${PORT:-8080}"
+# Optional: where to POST a line of text when a new device joins, e.g. https://ntfy.sh/<a-topic-you-pick>
+NOTIFY_URL="${NOTIFY_URL:-}"
+BLOCK_DIR=/var/lib/netinv-dns
+BLOCK_FILE="$BLOCK_DIR/blocked.conf"
 [[ -n "$IFACE" && -n "$GATEWAY" && -n "$PI_IP" && -n "$SUBNET" ]] || { echo "Could not detect interface/gateway. Set IFACE= and GATEWAY=." >&2; exit 1; }
 echo "Interface $IFACE, Pi address $PI_IP, network $SUBNET, router $GATEWAY"
 
@@ -31,6 +35,9 @@ install -d -o netinv -g netinv -m 750 /var/lib/netinv
 install -d -o root -g netinv -m 750 /var/log/netinv
 install -d /opt/netinv
 install -m 644 "$SRC/netinv.py" "$SRC/dashboard.html" /opt/netinv/
+# The block list lives outside /var/lib/netinv so dnsmasq (another user) can read it.
+install -d -o netinv -g netinv -m 755 "$BLOCK_DIR"
+[[ -f "$BLOCK_FILE" ]] || install -o netinv -g netinv -m 644 /dev/null "$BLOCK_FILE"
 
 # dnsmasq keeps the owner it finds; group netinv lets the collector read the log.
 DNSMASQ_USER="$(getent passwd dnsmasq >/dev/null && echo dnsmasq || echo nobody)"
@@ -49,6 +56,8 @@ server=$UPSTREAM2
 server=//$GATEWAY
 server=/lan/home/$GATEWAY
 rev-server=$SUBNET,$GATEWAY
+# sites blocked from the dashboard; re-read on SIGHUP (netinv-blocklist.path)
+servers-file=$BLOCK_FILE
 cache-size=10000
 log-queries=extra
 log-facility=/var/log/netinv/dnsmasq.log
@@ -79,7 +88,7 @@ Wants=network-online.target
 [Service]
 User=netinv
 Group=netinv
-ExecStart=/usr/bin/python3 /opt/netinv/netinv.py --iface $IFACE --gateway $GATEWAY --port $PORT
+ExecStart=/usr/bin/python3 /opt/netinv/netinv.py --iface $IFACE --gateway $GATEWAY --port $PORT --block-file $BLOCK_FILE${NOTIFY_URL:+ --notify-url $NOTIFY_URL}
 Restart=on-failure
 RestartSec=5
 # raw sockets for arp-scan, nothing else
@@ -87,7 +96,7 @@ AmbientCapabilities=CAP_NET_RAW
 CapabilityBoundingSet=CAP_NET_RAW
 NoNewPrivileges=true
 ProtectSystem=strict
-ReadWritePaths=/var/lib/netinv
+ReadWritePaths=/var/lib/netinv $BLOCK_DIR
 ProtectHome=true
 PrivateTmp=true
 
@@ -95,10 +104,32 @@ PrivateTmp=true
 WantedBy=multi-user.target
 EOF
 
+# netinv runs unprivileged and cannot signal dnsmasq. systemd watches the block list
+# and tells dnsmasq to re-read it (SIGHUP also drops its cache, so blocks apply at once).
+cat > /etc/systemd/system/netinv-blocklist.path <<EOF
+[Unit]
+Description=netinv - watch the DNS block list
+
+[Path]
+PathChanged=$BLOCK_FILE
+
+[Install]
+WantedBy=multi-user.target
+EOF
+
+cat > /etc/systemd/system/netinv-blocklist.service <<EOF
+[Unit]
+Description=netinv - make dnsmasq re-read the block list
+
+[Service]
+Type=oneshot
+ExecStart=/usr/bin/pkill -HUP -x dnsmasq
+EOF
+
 dnsmasq --test
 systemctl daemon-reload
-systemctl enable -q dnsmasq netinv
-systemctl restart dnsmasq netinv
+systemctl enable -q dnsmasq netinv netinv-blocklist.path
+systemctl restart dnsmasq netinv netinv-blocklist.path
 
 cat <<EOF
 
