@@ -65,6 +65,8 @@ CREATE TABLE IF NOT EXISTS usage_hourly(mac TEXT, hour INTEGER, down INTEGER, up
   PRIMARY KEY(mac, hour)) WITHOUT ROWID;
 CREATE TABLE IF NOT EXISTS sessions(token TEXT PRIMARY KEY, expires INTEGER);
 CREATE TABLE IF NOT EXISTS ports(mac TEXT PRIMARY KEY, ts INTEGER, open TEXT);
+CREATE TABLE IF NOT EXISTS threats(dev TEXT, domain TEXT, listed TEXT, first INTEGER, last INTEGER, count INTEGER,
+  PRIMARY KEY(dev, domain)) WITHOUT ROWID;
 """
 # Columns added after the first release; applied to older databases at startup.
 MIGRATIONS = [
@@ -81,7 +83,15 @@ SPEED_URL = "https://speed.cloudflare.com/__down?bytes=50000000"  # the server r
 # Ready-made block lists you can switch on: id -> (title, what it covers, where it comes from).
 # All from Steven Black's hosts project, https://github.com/StevenBlack/hosts
 _SB = "https://raw.githubusercontent.com/StevenBlack/hosts/master/"
+# The one list that is watched whether or not it is switched on: a lookup of anything on it is reported,
+# with the device that made it. Switching it on blocks those names as well. Kept small on purpose (the
+# "mini" edition of a threat feed built from many sources), so it fits comfortably in a Pi's memory.
+THREATS = "threats"
+THREAT_DAYS = 7  # how long a hit stays on the to-do list
 LISTS = {
+    THREATS: ("Malware and phishing", "Sites known to spread malware, steal passwords or control infected devices. "
+              "lanledger always watches for these and tells you which device tried one. Switch this on to block them as well.",
+              "https://raw.githubusercontent.com/hagezi/dns-blocklists/main/wildcard/tif.mini-onlydomains.txt"),
     "ads": ("Ads, trackers and malware", "The usual ad networks, trackers and known malicious sites.", _SB + "hosts"),
     "adult": ("Adult sites", "Pornography.", _SB + "alternates/porn-only/hosts"),
     "gambling": ("Gambling", "Betting and casino sites.", _SB + "alternates/gambling-only/hosts"),
@@ -422,6 +432,10 @@ class App:
         self.net_up = None
         self.speed_lock = threading.Lock()
         self.block_active, self.allow, self.list_set = set(), set(), set()
+        self.threat_set, self.threat_told = set(), {}  # listed names; device -> when we last sent an alert about it
+        self.gw_strikes = {}                           # hardware address -> sweeps running it has answered as the router
+        if self.watching():
+            self.x("INSERT OR IGNORE INTO lists(id, enabled, updated, count) VALUES(?,0,0,0)", (THREATS,))
         self.lists_dir = os.path.join(os.path.dirname(os.path.abspath(a.db)), "lists")
         self.load_lists()
         try:
@@ -555,9 +569,50 @@ class App:
                     self.ipmap[m.group(1)] = m.group(2).lower()
                     if not m.group(1).startswith("fe80"):
                         self.x("UPDATE devices SET ip6=? WHERE mac=?", (m.group(1), m.group(2).lower()))
+        self.check_gateway(by_ip, now)
         self.resolve_names(now)
         self.last_scan = now
         self.track_presence()
+
+    def check_gateway(self, by_ip, now):
+        """Has something else started answering as the router? That is how traffic on a home network gets
+        intercepted: a device tells the others "the router's address is me" and everything flows through it.
+        Seen two ways: who answers the sweep for the router's address, and who this Pi itself currently takes
+        the router to be. A router or mesh unit has several hardware addresses, a digit apart, so those are not
+        strangers; nor is anything you have said is fine. Twice running before a word is said: once is a blip."""
+        gw = self.a.gateway
+        if not gw:
+            return
+        claim = set(by_ip.get(gw, []))
+        if shutil.which("ip"):
+            m = re.search(r"lladdr\s+([0-9a-f:]{17})", run(["ip", "-4", "neigh", "show", gw]), re.I)
+            if m:
+                claim.add(m.group(1).lower())
+        if not claim:
+            return
+        known = self.meta("gw_mac")
+        if not known:
+            if len(claim) == 1:  # the first clear sight of the router is taken to be the router
+                self.meta("gw_mac", next(iter(claim)))
+            return
+        own = [known, *json.loads(self.meta("gw_trusted") or "[]"),
+               *(n["mac"] for n in self.deco_state["nodes"] if len(n.get("mac") or "") == 17)]
+        strangers = {mac for mac in claim if not any(mac[:14] == o[:14] for o in own)}
+        self.gw_strikes = {mac: self.gw_strikes.get(mac, 0) + 1 for mac in strangers}
+        alert = json.loads(self.meta("gw_alert") or "{}")
+        for mac in sorted(strangers):
+            if self.gw_strikes[mac] < 2:
+                continue
+            fresh = alert.get("mac") != mac or now - alert.get("last", 0) > 86400
+            # alone: the router we knew no longer answers at all, as after replacing it
+            alert = {"mac": mac, "first": now if fresh else alert.get("first", now), "last": now,
+                     "alone": not any(c[:14] == known[:14] for c in claim)}
+            self.meta("gw_alert", json.dumps(alert))
+            if fresh:
+                self.event("impostor", mac, gw)
+                self.notify(f"A device ({mac}) is answering as your router ({gw}). If you did not just replace the router, "
+                            "something may be intercepting your network's traffic. Open lanledger for details.")
+            break
 
     def track_presence(self):
         """Write an event when a device comes or goes. 'Gone' means silent for the same
@@ -592,6 +647,7 @@ class App:
                                    WHERE dev=? ON CONFLICT(dev, domain, hour)
                                    DO UPDATE SET count=count+excluded.count, blocked=blocked+excluded.blocked""", (mac, orphan))
                 self.db.execute("DELETE FROM dns_hourly WHERE dev=?", (orphan,))
+                self.db.execute("UPDATE OR REPLACE threats SET dev=? WHERE dev=?", (mac, orphan))
                 self.db.commit()
                 self.cache.clear()
 
@@ -885,7 +941,9 @@ class App:
             ts = int(time.mktime(time.strptime(f"{year - 1} {mon} {day} {hms}", "%Y %b %d %H:%M:%S")))
         return ts, self.ipmap.get(client, "ip:" + client), client, qtype, domain[:253]
 
-    def flush(self, pending, f, inode):
+    def flush(self, pending, f, inode, hits=None):
+        if hits:
+            self.record_threats(hits)
         if pending:
             rows = [(dev, dom, base_domain(dom), hour, n, b) for (dev, dom, hour), (n, b) in pending.items()]
             self.x("""INSERT INTO dns_hourly(dev, domain, base, hour, count, blocked) VALUES(?,?,?,?,?,?)
@@ -895,7 +953,7 @@ class App:
         self.meta("log_pos", f"{inode}:{f.tell()}")
 
     def tailer(self):
-        path, pending, last_prune = self.a.log, {}, 0
+        path, pending, hits, last_prune = self.a.log, {}, {}, 0
         for _ in range(150):  # let the first sweep finish so clients can be attributed
             if self.last_scan:
                 break
@@ -923,15 +981,20 @@ class App:
                         hit = self.is_blocked(domain)
                         n = pending.get((dev, domain, ts - ts % 3600), (0, 0))
                         pending[(dev, domain, ts - ts % 3600)] = (n[0] + 1, n[1] + bool(hit))
+                        listed = self.threat(domain)
+                        if listed:
+                            was = hits.get((dev, domain))
+                            hits[(dev, domain)] = (listed, was[1] if was else ts, ts, (was[3] if was else 0) + 1)
                         self.live.append({"ts": ts, "dev": dev, "ip": client, "type": qtype, "domain": domain, "blocked": hit})
                     if time.time() - last_flush < 5:
                         continue
                 else:
                     f.seek(pos)  # partial line: wait for the rest
-                self.flush(pending, f, inode)
+                self.flush(pending, f, inode, hits)
                 last_flush = time.time()
                 if now - last_prune > 3600:
                     self.x("DELETE FROM dns_hourly WHERE hour<?", (now - self.a.retention_days * 86400,))
+                    self.x("DELETE FROM threats WHERE last<?", (now - self.a.retention_days * 86400,))
                     last_prune = now
                 if not line.endswith("\n"):
                     try:
@@ -1133,6 +1196,8 @@ class App:
             "usage": self.q(f"""SELECT COALESCE(SUM(down),0) down, COALESCE(SUM(up),0) up FROM usage_hourly
                                 WHERE mac IN ({marks}) AND hour>=?""", (*fam, since))[0],
             "events": self.q(f"SELECT ts, kind, info FROM events WHERE mac IN ({marks}) ORDER BY ts DESC LIMIT 12", tuple(fam)),
+            "threats": self.q(f"""SELECT domain name, listed, first, last, count c FROM threats WHERE dev IN ({marks}) AND last>=?
+                                  ORDER BY last DESC LIMIT 20""", (*fam, since)),
             "ports": {"ts": ports[0]["ts"], "open": json.loads(ports[0]["open"])} if ports else None,
         }
 
@@ -1187,6 +1252,20 @@ class App:
         """Things worth a person's time, most urgent first. Each can be acted on or dismissed."""
         gone = {r["key"] for r in self.q("SELECT key FROM dismissed")}
         doing, now, items = self.day_activity()[0], time.time(), []
+        # security first: something answering as the router, then devices reaching for known-bad sites
+        alert = json.loads(self.meta("gw_alert") or "{}")
+        if alert.get("mac") and now - alert.get("last", 0) < 86400 and "impostor:" + alert["mac"] not in gone:
+            items.append({"key": "impostor:" + alert["mac"], "kind": "impostor", "mac": alert["mac"], "gateway": self.a.gateway,
+                          "alone": bool(alert.get("alone")), "last": alert["last"]})
+        by_dev = collections.defaultdict(list)
+        for r in self.q("SELECT dev, domain, listed, first, last, count FROM threats WHERE last>=? ORDER BY last DESC", (now - THREAT_DAYS * 86400,)):
+            by_dev[self.root(r["dev"])].append(r)
+        for mac, rows in by_dev.items():
+            key = f"threat:{mac}:{max(r['first'] for r in rows)}"  # a new site brings back an alert you had ignored
+            if key not in gone:
+                items.append({"key": key, "kind": "threat", "mac": mac, "count": sum(r["count"] for r in rows), "last": rows[0]["last"],
+                              "sites": [{"name": r["domain"], "listed": r["listed"], "blocked": bool(self.is_blocked(r["domain"]))} for r in rows[:6]],
+                              "more": max(0, len(rows) - 6)})
         for d in self.api_devices({}):
             mac = d["mac"]
             if mac.startswith("ip:"):
@@ -1212,7 +1291,12 @@ class App:
         return items
 
     def api_dismiss(self, body):
-        self.x("INSERT OR REPLACE INTO dismissed VALUES(?,?)", (str(body.get("key", ""))[:80], int(time.time())))
+        key = str(body.get("key", ""))[:80]
+        if key.startswith("impostor:"):  # "this is fine": it is part of the router from now on, and never asked about again
+            trusted = set(json.loads(self.meta("gw_trusted") or "[]")) | {key[9:]}
+            self.meta("gw_trusted", json.dumps(sorted(trusted)))
+            self.x("DELETE FROM meta WHERE k='gw_alert'")
+        self.x("INSERT OR REPLACE INTO dismissed VALUES(?,?)", (key, int(time.time())))
         return {"ok": True}
 
     def api_forget(self, body):
@@ -1220,9 +1304,9 @@ class App:
         mac = str(body.get("mac", ""))
         self.x("UPDATE devices SET parent='' WHERE parent=?", (mac,))
         self.x("DELETE FROM devices WHERE mac=?", (mac,))
-        for t, col in (("dns_hourly", "dev"), ("usage_hourly", "mac"), ("events", "mac"), ("ports", "mac")):
+        for t, col in (("dns_hourly", "dev"), ("usage_hourly", "mac"), ("events", "mac"), ("ports", "mac"), ("threats", "dev")):
             self.x(f"DELETE FROM {t} WHERE {col}=?", (mac,))
-        self.x("DELETE FROM dismissed WHERE key LIKE ?", ("%:" + mac,))
+        self.x("DELETE FROM dismissed WHERE key LIKE ? OR key LIKE ?", ("%:" + mac, f"threat:{mac}:%"))
         for ip in [ip for ip, m in list(self.ipmap.items()) if m == mac]:
             self.ipmap.pop(ip, None)
         self.load_parents()
@@ -1414,6 +1498,41 @@ class App:
             except OSError:
                 pass
         self.list_set = names
+        watched = set()
+        if self.watching():
+            try:
+                with open(self.list_path(THREATS), encoding="utf-8") as f:
+                    watched = {line.strip() for line in f if line.strip()}
+            except OSError:
+                pass
+        self.threat_set = watched
+
+    def watching(self):
+        return not getattr(self.a, "no_threat_list", False)
+
+    def threat(self, name):
+        """The listed name a lookup falls under ("login.bad.example" under "bad.example"), or "".
+        A name you have allowed as an exception is never reported."""
+        n = name
+        while "." in n:  # never a bare top-level domain
+            if n in self.threat_set:
+                return "" if self.is_allowed(name) else n
+            n = n.partition(".")[2]
+        return ""
+
+    def record_threats(self, hits):
+        """hits: {(device, name looked up): (listed name, first seen, last seen, how many)}."""
+        for (dev, domain), (listed, first, last, n) in hits.items():
+            new = not self.q("SELECT 1 FROM threats WHERE dev=? AND domain=?", (dev, domain))
+            self.x("""INSERT INTO threats VALUES(?,?,?,?,?,?) ON CONFLICT(dev, domain)
+                      DO UPDATE SET last=MAX(last, excluded.last), count=count+excluded.count""", (dev, domain, listed, first, last, n))
+            if new:
+                root = self.root(dev)
+                self.event("threat", root, domain)
+                if time.time() - self.threat_told.get(root, 0) > 3600:  # an infected device can try hundreds: say it once an hour
+                    self.threat_told[root] = time.time()
+                    self.notify(f"{self.names().get(root, root)} tried to reach a site on the malware and phishing list: {domain}")
+        hits.clear()
 
     def write_hosts(self):
         """One hosts-format file for dnsmasq (addn-hosts): every listed name answers with a dead address."""
@@ -1432,6 +1551,8 @@ class App:
             parts = line.split("#", 1)[0].split()
             if len(parts) >= 2 and parts[0] in ("0.0.0.0", "127.0.0.1") and DOMAIN_RE.fullmatch(parts[1].lower()):
                 names.add(parts[1].lower())
+            elif len(parts) == 1 and DOMAIN_RE.fullmatch(parts[0].lower()):  # or simply one name to a line
+                names.add(parts[0].lower())
         if len(names) < 10:
             raise ValueError("the list came back empty")
         os.makedirs(self.lists_dir, exist_ok=True)
@@ -1442,7 +1563,7 @@ class App:
     def refresh_lists(self, force=None):
         """Download enabled lists that are missing or more than a day old."""
         changed, err = False, ""
-        for r in self.q("SELECT id, updated FROM lists WHERE enabled=1"):
+        for r in self.q("SELECT id, updated FROM lists WHERE enabled=1 OR id=?", (THREATS if self.watching() else "",)):
             if r["id"] in LISTS and (r["id"] == force or (r["updated"] or 0) < time.time() - 86400):
                 try:
                     self.fetch_list(r["id"])
@@ -1756,6 +1877,7 @@ def main():
     ap.add_argument("--notify-url", default="",
                     help="POST a line of text here when a new device joins (e.g. an ntfy.sh topic URL)")
     ap.add_argument("--oui-url", default=OUI_URL, help="where to fetch the register of hardware makers; empty to never fetch")
+    ap.add_argument("--no-threat-list", action="store_true", help="do not fetch or watch the malware and phishing list")
     ap.add_argument("--no-probe", action="store_true", help="do not check internet reachability")
     ap.add_argument("--reset-password", action="store_true", help="remove the dashboard password (and the stored Deco password) and exit")
     ap.add_argument("--allow-host", action="append", default=[], help="extra hostname the dashboard is reached by")

@@ -24,7 +24,7 @@ class Case(unittest.TestCase):
         self.addCleanup(self.dir.cleanup)
         self.app = lanledger.App(argparse.Namespace(
             db=os.path.join(self.dir.name, "t.db"), gateway="", retention_days=30, scan_interval=60, block_file="",
-            block_hosts="", list_base="", notify_url="", no_probe=True, log="", iface="", scan_cmd="", oui_url=""))
+            block_hosts="", list_base="", notify_url="", no_probe=True, log="", iface="", scan_cmd="", oui_url="", no_threat_list=False))
         self.addCleanup(self.app.db.close)
         self.now = int(time.time())
 
@@ -204,6 +204,152 @@ class Summary(Case):
         self.assertIs(self.app.api_devices({}), self.app.api_devices({}))   # asked twice, worked out once
         self.app.x("UPDATE devices SET label='Fridge' WHERE mac=?", (A,))
         self.assertEqual(self.devices()[A]["label"], "Fridge")
+
+
+class Threats(Case):
+    """Lookups of names on the malware and phishing list are reported with the device that made them."""
+
+    def setUp(self):
+        super().setUp()
+        self.app.threat_set = {"bad.example", "phish.example"}
+        self.said = []
+        self.app.notify = lambda text: self.said.append(text) or ""
+        self.device(A, label="Desktop")
+        self.said.clear()                                                # the "new device" alert is not what is under test
+
+    def hit(self, name, dev=A, n=1, ago=0):
+        self.app.record_threats({(dev, name): (self.app.threat(name), self.now - ago, self.now - ago, n)})
+
+    def test_a_name_under_a_listed_one_counts_and_others_do_not(self):
+        for name, want in (("bad.example", "bad.example"), ("login.bad.example", "bad.example"), ("a.b.bad.example", "bad.example"),
+                           ("notbad.example", ""), ("example", ""), ("bad.example.com", "")):
+            self.assertEqual(self.app.threat(name), want, name)
+
+    def test_an_exception_you_allowed_is_never_reported(self):
+        self.app.allow = {"bad.example"}
+        self.assertEqual(self.app.threat("login.bad.example"), "")
+
+    def test_the_list_is_read_one_name_to_a_line_or_as_a_hosts_file(self):
+        src = os.path.join(self.dir.name, "src")
+        os.makedirs(src)
+        with open(os.path.join(src, lanledger.THREATS), "w") as f:
+            f.write("# a comment\nbad.example\n0.0.0.0 phish.example\nnot a name\nlocalhost\n" + "".join(f"x{i}.example\n" for i in range(10)))
+        import pathlib
+        self.app.a.list_base = pathlib.Path(src).as_uri()
+        self.app.refresh_lists()
+        self.assertEqual(len(self.app.threat_set), 12)
+        self.assertTrue({"bad.example", "phish.example"} <= self.app.threat_set)
+        self.assertEqual(self.app.list_set, set())                       # watched, not blocked, until switched on
+        self.assertEqual(self.app.is_blocked("bad.example"), "")
+
+    def test_a_hit_goes_on_the_to_do_list_first_and_into_the_history(self):
+        self.hit("login.bad.example", n=3)
+        item = self.app.api_attention({})[0]
+        self.assertEqual((item["kind"], item["mac"], item["count"]), ("threat", A, 3))
+        self.assertEqual(item["sites"], [{"name": "login.bad.example", "listed": "bad.example", "blocked": False}])
+        self.assertEqual([(e["kind"], e["info"]) for e in self.app.api_events({}) if e["kind"] == "threat"], [("threat", "login.bad.example")])
+        self.assertEqual(self.app.api_device({"mac": A})["threats"][0]["name"], "login.bad.example")
+
+    def test_you_are_told_once_not_for_every_lookup(self):
+        self.hit("login.bad.example")
+        self.hit("login.bad.example", n=40)
+        self.hit("phish.example")
+        self.assertEqual(self.said, ["Desktop tried to reach a site on the malware and phishing list: login.bad.example"])
+        self.assertEqual(self.app.q("SELECT count FROM threats WHERE domain='login.bad.example'")[0]["count"], 41)
+
+    def test_ignoring_holds_until_the_device_tries_somewhere_new(self):
+        self.hit("login.bad.example", ago=100)
+        key = self.attention_keys("threat")[0]
+        self.app.api_dismiss({"key": key})
+        self.hit("login.bad.example", n=5)                               # the same site again: still ignored
+        self.assertEqual(self.attention_keys("threat"), [])
+        self.hit("phish.example")                                        # a new one: back on the list
+        self.assertEqual(len(self.attention_keys("threat")), 1)
+
+    def test_blocking_the_site_is_reflected(self):
+        self.hit("login.bad.example")
+        self.app.block_active = {"bad.example"}
+        self.assertTrue(self.app.api_attention({})[0]["sites"][0]["blocked"])
+
+    def test_hits_made_before_a_device_was_identified_follow_it(self):
+        self.hit("phish.example", dev="ip:10.0.0.77")
+        self.app.x("INSERT INTO dns_hourly(dev, domain, base, hour, count) VALUES('ip:10.0.0.77','phish.example','phish.example',?,1)", (self.now - self.now % 3600,))
+        self.app.seen(B, "10.0.0.77", "", self.now)
+        self.assertEqual([r["dev"] for r in self.app.q("SELECT dev FROM threats")], [B])
+
+    def test_old_hits_drop_off_the_to_do_list(self):
+        self.hit("phish.example", ago=(lanledger.THREAT_DAYS + 1) * DAY)
+        self.assertEqual(self.attention_keys("threat"), [])
+
+    def attention_keys(self, kind):
+        return [i["key"] for i in self.app.api_attention({}) if i["kind"] == kind]
+
+
+class RouterImpostor(Case):
+    """Something else answering for the router's address is how a home network's traffic gets intercepted."""
+    GW, ROUTER, OTHER = "10.0.0.1", "60:83:e7:72:c3:da", "00:1c:c2:78:4e:43"
+
+    def setUp(self):
+        super().setUp()
+        self.app.a.gateway = self.GW
+        self.said = []
+        self.app.notify = lambda text: self.said.append(text) or ""
+        lanledger.shutil.which, self._which = (lambda name: None), lanledger.shutil.which   # no `ip` command: the sweep alone
+        self.addCleanup(setattr, lanledger.shutil, "which", self._which)
+        self.sweep(self.ROUTER)                                          # first clear sight: this is the router
+
+    def sweep(self, *macs):
+        self.app.check_gateway({self.GW: list(macs)}, self.now)
+
+    def alerts(self):
+        return [i for i in self.app.api_attention({}) if i["kind"] == "impostor"]
+
+    def test_the_first_clear_sight_of_the_router_is_remembered(self):
+        self.assertEqual(self.app.meta("gw_mac"), self.ROUTER)
+        self.sweep(self.ROUTER)
+        self.assertEqual((self.alerts(), self.said), ([], []))
+
+    def test_a_second_device_answering_is_reported_after_two_sweeps_running(self):
+        self.sweep(self.ROUTER, self.OTHER)
+        self.assertEqual(self.alerts(), [])                              # once is a blip
+        self.sweep(self.ROUTER, self.OTHER)
+        a = self.alerts()[0]
+        self.assertEqual((a["mac"], a["alone"], a["gateway"]), (self.OTHER, False, self.GW))
+        self.assertEqual(len(self.said), 1)
+        self.sweep(self.ROUTER, self.OTHER)
+        self.assertEqual(len(self.said), 1)                              # told once, not every minute
+        self.assertEqual(self.app.api_attention({})[0]["kind"], "impostor")   # and it heads the list
+
+    def test_a_blip_does_not_add_up(self):
+        self.sweep(self.ROUTER, self.OTHER)
+        self.sweep(self.ROUTER)
+        self.sweep(self.ROUTER, self.OTHER)
+        self.assertEqual(self.alerts(), [])
+
+    def test_the_router_s_own_other_addresses_and_mesh_units_are_not_strangers(self):
+        self.app.deco_state["nodes"] = [{"mac": "48:22:54:d5:5e:10"}]
+        for _ in range(3):
+            self.sweep(self.ROUTER, "60:83:e7:72:c3:db", "48:22:54:d5:5e:14")
+        self.assertEqual(self.alerts(), [])
+
+    def test_a_replaced_router_is_reported_as_a_change_and_can_be_accepted(self):
+        for _ in range(2):
+            self.sweep(self.OTHER)
+        a = self.alerts()[0]
+        self.assertTrue(a["alone"])
+        self.app.api_dismiss({"key": a["key"]})                          # "this is fine"
+        for _ in range(3):
+            self.sweep(self.OTHER)
+        self.assertEqual((self.alerts(), len(self.said)), ([], 1))
+
+    def test_what_the_pi_itself_believes_counts_too(self):
+        lanledger.shutil.which = lambda name: "/sbin/ip"
+        real = lanledger.run
+        lanledger.run = lambda cmd, timeout=10: f"{self.GW} dev eth0 lladdr {self.OTHER} REACHABLE" if cmd[:2] == ["ip", "-4"] else real(cmd, timeout)
+        self.addCleanup(setattr, lanledger, "run", real)
+        for _ in range(2):
+            self.sweep(self.ROUTER)                                      # the sweep looks normal, but the Pi has been told otherwise
+        self.assertEqual(self.alerts()[0]["mac"], self.OTHER)
 
 
 class Export(Case):

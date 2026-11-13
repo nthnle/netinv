@@ -61,6 +61,7 @@ main{padding:16px 20px 48px;max-width:1280px;margin:0 auto}
 .attn-row{display:flex;gap:12px;align-items:center;padding:10px 0;border-top:1px solid var(--line);flex-wrap:wrap}
 .attn-row .txt{flex:1 1 260px;min-width:0}
 .attn-row .txt b{display:block}
+.attn-row.urgent .txt b{color:var(--bad)}
 .attn-row .txt span{color:var(--mute);font-size:13.5px}
 .attn-row .btns{display:flex;gap:8px;flex-wrap:wrap}
 
@@ -806,7 +807,8 @@ async function loadBlocked(){
   };
   fill($("#lists"), el("ul", {class:"lst"}, b.lists.map(l => el("li", {},
     el("div", {class:"grow"}, el("b", {}, l.title), l.enabled ? el("span", {class:"tag ok", style:"border-color:var(--ok)"}, "on") : null,
-      el("div", {class:"mute"}, l.about, l.enabled && l.count ? ` ${fmt(l.count)} sites, updated ${ago(l.updated)}.` : "")),
+      !l.enabled && l.id === "threats" && l.count ? el("span", {class:"tag"}, "watching") : null,
+      el("div", {class:"mute"}, l.about, l.count && (l.enabled || l.id === "threats") ? ` ${fmt(l.count)} sites, updated ${ago(l.updated)}.` : "")),
     el("button", {class: l.enabled ? "ghost" : "act", disabled: !b.can_lists, onclick:() => toggle(l, !l.enabled)}, l.enabled ? "Turn off" : "Turn on")))));
   fill($("#allowed"), b.allowed.length ? [el("h3", {style:"margin-top:16px"}, "Exceptions you allowed"),
     el("ul", {class:"lst"}, b.allowed.map(a => el("li", {}, el("span", {class:"grow mono"}, a.domain),
@@ -869,12 +871,27 @@ async function dismiss(key){
 }
 function attnRow(it){
   const d = byMac.get(it.mac);
-  if (!d) return null;
-  const n = devName(d), where = d.ip ? ` at ${d.ip}` : "";
-  const view = el("button", {class:"ghost", onclick:() => openDevice(d.mac)}, "View device");
+  if (!d && it.kind !== "impostor") return null;   // an impostor may be a device the sweep has never listed
+  const n = d ? devName(d) : "A device lanledger has not seen before", where = d && d.ip ? ` at ${d.ip}` : "";
+  const view = d ? el("button", {class:"ghost", onclick:() => openDevice(d.mac)}, "View device") : null;
   const ignore = el("button", {class:"ghost", title:"Do not show this again", onclick:() => dismiss(it.key)}, "Ignore");
   let title, text, btns;
-  if (it.kind === "new") {
+  if (it.kind === "impostor") {
+    title = it.alone ? "Your router's hardware address has changed" : "Another device is answering as your router";
+    text = `${n} (${it.mac}) is answering for your router's address, ${it.gateway}. ` + (it.alone
+      ? "That is expected if you have just replaced the router or its main mesh unit. If you have not, something may be intercepting your network's traffic."
+      : "Two devices should never do that. It can be a misconfigured gadget, or something intercepting your network's traffic.")
+      + " If you do not recognise it, disconnect it.";
+    btns = [view, el("button", {class:"ghost", title:"Treat this device as part of your router from now on", onclick:() => {
+      if (confirm(`Trust ${it.mac} as part of your router?\n\nlanledger will stop warning about it. Only do this if you know what the device is.`)) dismiss(it.key); }}, "This is fine")];
+  } else if (it.kind === "threat") {
+    const open = it.sites.filter(s => !s.blocked), names = it.sites.map(s => s.name).join(", ") + (it.more ? ` and ${it.more} more` : "");
+    title = `${n} tried to reach ${it.sites.length + it.more === 1 ? "a site" : "sites"} on the malware and phishing list`;
+    text = `${names}. Last tried ${ago(it.last)}. ` + (!open.length ? "lanledger is refusing these lookups. " : open.length < it.sites.length ? "Some of these are not being blocked. " : "These lookups are not being blocked. ")
+      + "It can mean the device is infected, or only that someone followed a bad link. If you cannot explain it, run a virus scan on the device, or disconnect it if it is a gadget.";
+    btns = [open.length && canBlock ? el("button", {class:"act", onclick:() => setBlock([...new Set(open.map(s => s.listed))], true,
+      `Block ${open.length === 1 ? "this site" : "these sites"} for every device on your network?\n\n${[...new Set(open.map(s => s.listed))].join("\n")}\n\n${UNDO}`)}, "Block " + (open.length === 1 ? "it" : "them")) : null, view, ignore];
+  } else if (it.kind === "new") {
     title = isUnnamed(d) ? (isGuess(d) ? `New device, probably: ${n}` : "New device lanledger cannot identify") : `New device: ${n}`;
     text = `First seen ${ago(d.first_seen)}${where}.` + (d.vendor ? ` Made by ${d.vendor}.` : "") + (d.node ? ` Connected through the ${nodeName(d)}.` : "") + " Is it yours?";
     btns = [el("button", {class:"act", onclick:() => openDevice(d.mac, true)}, "Name it"),
@@ -899,7 +916,8 @@ function attnRow(it){
     btns = [canBlock ? el("button", {class:"act", onclick:async () => { if (await setBlock(it.services.map(service => ({service})), true,
       `Block ${it.services.join(", ")} for every device on your network?\n\nThose ads and trackers stop loading everywhere. Now and then a site or app that depends on them misbehaves. ${UNDO}`)) dismiss(it.key); }}, "Block the tracking") : null, view, ignore];
   }
-  return el("div", {class:"attn-row"}, icon(d), el("div", {class:"txt"}, el("b", {}, title), el("span", {}, text)), el("div", {class:"btns"}, btns));
+  const urgent = it.kind === "impostor" || it.kind === "threat";
+  return el("div", {class:"attn-row" + (urgent ? " urgent" : "")}, d ? icon(d) : null, el("div", {class:"txt"}, el("b", {}, title), el("span", {}, text)), el("div", {class:"btns"}, btns));
 }
 function renderAttention(){
   // Rebuilding would steal keyboard focus from these buttons every refresh, so only do it when something changed.
@@ -1085,7 +1103,8 @@ function detailHead(d){
     tech,
   ];
 }
-const EVENT = {joined:"First seen on the network", online:"Came online", offline:"Went offline"};
+const EVENT = {joined:"First seen on the network", online:"Came online", offline:"Went offline",
+  threat:"Tried to reach a site on the malware and phishing list", impostor:"Answered as your router"};
 async function checkPorts(d){
   portsBusy = true; renderDetail();
   const r = await post("/api/ports", {mac:d.mac});
@@ -1121,6 +1140,9 @@ async function renderDetail(refresh){
       "This device uses a VPN, iCloud Private Relay or private DNS, so part of what it does is not visible here.") : null,
     chart(data.hourly, range),
     activityList(data.activity),
+    (data.threats || []).length ? [el("div", {class:"sec"}, el("h3", {style:"color:var(--bad)"}, "Sites on the malware and phishing list")),
+      el("ul", {class:"lst"}, data.threats.map(t => el("li", {}, el("span", {class:"grow mono"}, t.name),
+        el("span", {class:"mute"}, `${fmt(t.c)} ${t.c === 1 ? "try" : "tries"}, last ${ago(t.last)}`))))] : null,
     data.top.length ? [el("div", {class:"sec"}, el("h3", {}, "Sites it contacted"), seg("Detail", [["base","By site"],["domain","Every address"]], group, v => group = v)),
       table([{t:"Site"},{t:"Lookups",num:1},{t:"Last",num:1},{t:""}],
         data.top.map(r => el("tr", {}, siteCell(r, max),
@@ -1198,6 +1220,8 @@ async function loadEvents(){
   const rows = await api("/api/events");
   const who = e => byMac.has(e.mac) ? el("button", {class:"link", onclick:() => openDevice(e.mac)}, e.name || e.mac) : (e.name || e.mac);
   const say = e => e.kind === "internet_down" ? "Internet connection lost" : e.kind === "internet_up" ? `Internet back ${e.info || ""}`
+    : e.kind === "threat" ? [who(e), " tried to reach a site on the malware and phishing list: ", el("span", {class:"mono"}, e.info)]
+    : e.kind === "impostor" ? [who(e), " answered as your router"]
     : [who(e), e.kind === "joined" ? " joined your network for the first time" : e.kind === "online" ? " came online" : " went offline"];
   fill($("#events"), rows.length ? el("ul", {class:"lst"}, rows.map(e => el("li", {}, el("span", {class:"when"}, when(e.ts)), el("span", {class:"grow"}, say(e)))))
     : el("div", {class:"empty"}, "Nothing yet. Events appear here as devices come and go."));

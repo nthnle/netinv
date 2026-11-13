@@ -20,14 +20,19 @@ It is one Python program with no dependencies beyond what Raspberry Pi OS ships,
 - A full inventory, refreshed every minute, with a list view and a map view.
 - Names from wherever they can be found: ones you type, your Deco app (optional), what devices announce about themselves, and your router.
 - A best guess at anything unnamed ("Apple device", "Samsung TV", "Tuya-based smart plug"), clearly marked as a guess.
-- A to-do list at the top of the page: new devices, devices hiding their activity, devices that mostly talk to ad trackers, devices on your guest Wi-Fi.
+- A to-do list at the top of the page: security warnings first, then new devices, devices hiding their activity, devices that mostly talk to ad trackers, devices on your guest Wi-Fi.
 - Per device: what it mostly does, when it was active, which sites it contacted, when it came and went, and which network services it leaves open.
 - Say whose each device is and see activity per person. Merge a device's Wi-Fi and Ethernet entries into one.
+
+**Security**
+- Tells you which device tried to reach a site known for malware, phishing or controlling infected devices, whether or not you block those sites.
+- Warns when something other than your router starts answering as your router, which is how traffic on a home network gets intercepted.
+- See [what this can and cannot catch](#security-warnings).
 
 **Blocking**
 - Block any site from wherever you see it. Blocking a known service such as TikTok blocks all of its known addresses in one click.
 - Block only during certain hours, such as 21:00 to 07:00.
-- Ready-made lists you can switch on: ads, trackers and malware; adult sites; gambling; social media; fake news. They update daily, and you can allow exceptions.
+- Ready-made lists you can switch on: malware and phishing; ads, trackers and malware; adult sites; gambling; social media; fake news. They update daily, and you can allow exceptions.
 
 **Your connection**
 - Is the internet up, how responsive is it, and when did it drop in the last week.
@@ -35,7 +40,7 @@ It is one Python program with no dependencies beyond what Raspberry Pi OS ships,
 
 **Extras**
 - A password for the dashboard.
-- Alerts to your phone when a new device joins or the internet comes back after an outage.
+- Alerts to your phone when a new device joins, a security warning is raised, or the internet comes back after an outage.
 - TP-Link Deco integration: device names from the Deco app, wired or Wi-Fi, guest network, and an estimate of data used per device.
 - Works on a phone, and can be added to the home screen like an app.
 - Download the inventory as a spreadsheet.
@@ -100,7 +105,7 @@ If you installed before `update.sh` existed, run `git pull` and `sudo ./install.
 
 | Tab | What is there |
 |---|---|
-| **Devices** | The to-do list, the inventory (list or map), and everything about a device when you click it. |
+| **Devices** | The to-do list (security warnings first), the inventory (list or map), and everything about a device when you click it. |
 | **Activity** | What the whole network did in the last 24 hours, internet health and speed, activity per person, and "who used this site?". |
 | **Blocked** | What you have blocked and when, ready-made block lists, exceptions, and what was actually blocked today. |
 | **Live** | Lookups as they happen, and a log of devices coming and going. |
@@ -125,6 +130,25 @@ Before you do:
 - You can test the connection by hand first: `python3 deco.py http://<deco-address>`.
 
 The Deco integration follows the protocol used by the [Home Assistant Deco integration](https://github.com/amosyuen/ha-tplink-deco). It has been tested against a simulated Deco. Reports from real hardware, working or not, are welcome.
+
+### Security warnings
+
+Two checks run all the time and put a red entry at the top of the to-do list. If alerts are set up, they also reach your phone.
+
+**A device tried to reach a known-bad site.** lanledger keeps a list of sites known for malware, phishing and controlling infected devices, refreshed daily, and compares every lookup against it. A match names the device and the site. This happens whether or not the list is switched on for blocking: watching is always on, blocking is your choice (the **Malware and phishing** list on the Blocked tab, or **Block them** on the warning itself).
+
+- It usually means one of two things: the device is infected, or someone followed a bad link. A single hit from a phone or computer is often the second. Repeated hits, or any hit from a gadget nobody browses on, deserve a virus scan or unplugging the gadget.
+- Lists are sometimes wrong. If a site you trust is flagged, add it under **Exceptions** on the Blocked tab and it will not be reported again.
+- **Ignore** silences the warning for the sites listed in it. If the same device tries a different listed site later, the warning comes back.
+
+**Something is answering as your router.** Every sweep, lanledger checks which hardware answers for the router's address, and which hardware the Pi itself has been told is the router. If a device that is not part of your router or mesh shows up there twice in a row, you are warned.
+
+- If you have just replaced the router or the main mesh unit, this is expected: press **This is fine** and that hardware is trusted from then on.
+- Otherwise find the device (the warning gives its hardware address and, if known, its name) and disconnect it if you cannot explain it.
+
+What these do not catch: connections made straight to a numeric address with no lookup, anything from a device that bypasses the Pi (see [Limits](#limits)), and an impostor that only fools other devices while staying quiet towards the Pi. Treat them as an early warning, not as proof that the network is clean.
+
+To switch the known-bad site check off entirely, start lanledger with `--no-threat-list`.
 
 ### Alerts
 
@@ -154,6 +178,7 @@ Be clear-eyed about what a DNS-based tool can and cannot do.
   - Your DNS lookups, to the upstream servers, as with any DNS setup.
   - A connection check to `1.1.1.1` and `9.9.9.9` every minute.
   - Block lists you switch on, downloaded daily from GitHub.
+  - The malware and phishing list, downloaded daily from GitHub whether or not you block with it, because it is what the security warnings check against. Nothing about your devices or lookups is sent: the comparison happens on the Pi. Turn it off with `--no-threat-list`.
   - The public register of hardware makers, downloaded about once a month from the IEEE, so devices show who made them. Nothing about your devices is sent. Turn it off with `--oui-url ""`.
   - A speed test download from Cloudflare, when you press the button.
   - Alerts, to the address you configure, if you configure one.
@@ -198,6 +223,7 @@ This is a personal project that works for a home network. The core (inventory, a
 ## Credits
 
 - Block lists: [Steven Black's hosts project](https://github.com/StevenBlack/hosts).
+- Malware and phishing list: the Threat Intelligence Feeds (mini) from [HaGeZi's DNS blocklists](https://github.com/hagezi/dns-blocklists).
 - Deco protocol: [ha-tplink-deco](https://github.com/amosyuen/ha-tplink-deco) by amosyuen.
 - Alerts work nicely with [ntfy](https://ntfy.sh).
 - DNS by [dnsmasq](https://thekelleys.org.uk/dnsmasq/doc.html), discovery by [arp-scan](https://github.com/royhills/arp-scan).
