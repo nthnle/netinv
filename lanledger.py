@@ -208,6 +208,21 @@ def name_hint(r):
     return next((hint for rx, hint in NAME_HINTS if rx.search(text)), "") if text.strip() else ""
 
 
+def unit_of(r, nodes):
+    """Which mesh unit a row of the inventory is. By address if it has the unit's own; otherwise by hardware
+    address. Units bought together differ only in the last two digits, and each unit answers under a few
+    addresses a digit or so from its own, so among units that share the rest, the nearest one is it."""
+    for n in nodes:
+        if n.get("ip") and n["ip"] == r["ip"]:
+            return n
+    try:
+        last = int(r["mac"][15:], 16)
+        near = [n for n in nodes if len(n.get("mac") or "") == 17 and n["mac"][:14] == r["mac"][:14]]
+        return min(near, key=lambda n: abs(int(n["mac"][15:], 16) - last), default=None)
+    except ValueError:
+        return None
+
+
 def parse_oui(text):
     """The IEEE register (CSV: registry, 6 hex digits, organisation, address) as {"AABBCC": "Maker"}."""
     out = {}
@@ -1148,8 +1163,7 @@ class App:
             r["infra"] = ("router" if self.a.gateway and r["ip"] == self.a.gateway else "pi" if r["vendor"] == PI_VENDOR
                           else "mesh" if is_mesh(r) else "")
             # which mesh unit this row is, so the map can draw each unit with its own devices around it
-            unit = r["infra"] and next((n for n in nodes if n.get("ip") and n["ip"] == r["ip"]
-                                        or len(n.get("mac") or "") == 17 and n["mac"][:14] == mac[:14]), None)
+            unit = r["infra"] and unit_of(r, nodes)
             r["unit"], r["unit_main"] = (unit["name"][:60], int(bool(unit.get("main")))) if unit else ("", 0)
             # The Deco says it is online, yet it has not answered the Pi's sweep for a good while: the two are being
             # kept apart, which is what the Deco's Device Isolation does. Its lookups cannot reach lanledger either.

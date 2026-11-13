@@ -557,14 +557,23 @@ function renderMap(list){
   }
   if (sats.length) {  // satellites sit round the main unit, each given as much of the circle as its cluster needs
     const big = Math.max(...sats.map(g => g.ext)), span = D => sats.map(g => 2 * Math.asin(Math.min(1, g.ext / D)));
+    // Where each satellite sits, as an angle, for a given distance out. One or two go below and to the sides,
+    // which fills a roughly square space; opposite each other they would make a long thin strip with tiny labels.
+    const angles = D => {
+      if (sats.length === 1) return [Math.PI / 4];
+      if (sats.length === 2) return [3 * Math.PI / 4, Math.PI / 4];
+      const spans = span(D), slack = (2 * Math.PI - spans.reduce((a, b) => a + b, 0)) / sats.length;
+      let a = -Math.PI / 2 - spans[0] / 2;
+      return spans.map(sp => { const mid = a + sp / 2; a += sp + slack; return mid; });
+    };
+    const place = D => angles(D).map((mid, i) => ({mid, x: Math.cos(mid) * D, y: Math.sin(mid) * D, ext: sats[i].ext}));
+    const clash = at => at.some((p, i) => at.some((q, k) => k > i && Math.hypot(p.x - q.x, p.y - q.y) < p.ext + q.ext));
     let D = centre.ext + big + 8;
-    while (span(D).reduce((a, b) => a + b, 0) > 2 * Math.PI) D += 10;
-    const spans = span(D), slack = (2 * Math.PI - spans.reduce((a, b) => a + b, 0)) / sats.length;
-    let a = -Math.PI / 2 - spans[0] / 2;
-    sats.forEach((g, i) => {
-      const mid = a + spans[i] / 2; a += spans[i] + slack;
-      g.x = Math.cos(mid) * D; g.y = Math.sin(mid) * D;
-      g.start = mid + Math.PI + Math.PI / Math.max(1, g.rings.length ? g.rings[0].items.length : 1);  // leave the gap facing the main unit
+    while (D < 5000 && (span(D).reduce((a, b) => a + b, 0) > 2 * Math.PI || clash(place(D)))) D += 10;
+    place(D).forEach((at, i) => {
+      const g = sats[i];
+      g.x = at.x; g.y = at.y;
+      g.start = at.mid + Math.PI + Math.PI / Math.max(1, g.rings.length ? g.rings[0].items.length : 1);  // leave the gap facing the main unit
     });
     // turn the main unit's own devices so that as few as possible sit on a line out to a satellite
     const trunks = sats.map(g => Math.atan2(g.y, g.x)), turn = (a, t) => Math.abs(Math.atan2(Math.sin(a - t), Math.cos(a - t)));
@@ -869,6 +878,7 @@ async function dismiss(key){
   if (!r.ok) { toast(r.error); return; }
   attnSeen = ""; await refresh();
 }
+const urgentKind = it => it.kind === "impostor" || it.kind === "threat";
 function attnRow(it){
   const d = byMac.get(it.mac);
   if (!d && it.kind !== "impostor") return null;   // an impostor may be a device the sweep has never listed
@@ -916,7 +926,7 @@ function attnRow(it){
     btns = [canBlock ? el("button", {class:"act", onclick:async () => { if (await setBlock(it.services.map(service => ({service})), true,
       `Block ${it.services.join(", ")} for every device on your network?\n\nThose ads and trackers stop loading everywhere. Now and then a site or app that depends on them misbehaves. ${UNDO}`)) dismiss(it.key); }}, "Block the tracking") : null, view, ignore];
   }
-  const urgent = it.kind === "impostor" || it.kind === "threat";
+  const urgent = urgentKind(it);
   return el("div", {class:"attn-row" + (urgent ? " urgent" : "")}, d ? icon(d) : null, el("div", {class:"txt"}, el("b", {}, title), el("span", {}, text)), el("div", {class:"btns"}, btns));
 }
 function renderAttention(){
@@ -939,7 +949,7 @@ function renderAttention(){
   const shown = attnAll ? rest : rest.slice(0, 4);
   fill(box, el("h2", {}, `Needs your attention (${attention.length})`),
     el("p", {class:"mute", style:"margin-bottom:6px"}, "Deal with each one, or ignore it and it will not come back."),
-    crowd, shown.map(attnRow),
+    shown.filter(urgentKind).map(attnRow), crowd, shown.filter(i => !urgentKind(i)).map(attnRow),   // security first, even before new devices
     rest.length > shown.length ? el("div", {class:"attn-row"}, el("button", {class:"link", onclick:() => { attnAll = true; renderAttention(); }}, `Show ${rest.length - shown.length} more`)) : null);
 }
 async function reviewAll(list){

@@ -206,6 +206,30 @@ class Summary(Case):
         self.assertEqual(self.devices()[A]["label"], "Fridge")
 
 
+class MeshUnits(Case):
+    def test_units_from_one_box_are_told_apart(self):
+        # three units bought together: hardware addresses alike but for the last two digits, as on a real mesh
+        nodes = [{"name": "Living Room", "mac": "48:22:54:d5:5e:10", "ip": "192.168.68.1", "main": True},
+                 {"name": "Office", "mac": "48:22:54:d5:5e:14", "ip": "192.168.71.249", "main": False},
+                 {"name": "Laundry", "mac": "48:22:54:d5:5e:18", "ip": "192.168.71.248", "main": False}]
+        unit = lambda mac, ip="": (lanledger.unit_of({"mac": mac, "ip": ip}, nodes) or {}).get("name")
+        self.assertEqual([unit(n["mac"]) for n in nodes], ["Living Room", "Office", "Laundry"])
+        self.assertEqual(unit("48:22:54:d5:5e:15"), "Office")                 # a unit's second address, a digit away
+        self.assertEqual(unit("48:22:54:d5:5e:19"), "Laundry")
+        self.assertEqual(unit("aa:bb:cc:00:00:01", "192.168.71.248"), "Laundry")   # by address, whatever the hardware says
+        self.assertIsNone(unit("aa:bb:cc:00:00:01", "192.168.68.50"))
+
+    def test_the_map_gets_each_unit_under_its_own_name(self):
+        self.app.a.gateway = "10.0.0.1"
+        self.app.deco_state["nodes"] = [{"name": "Living Room", "mac": "48:22:54:d5:5e:10", "ip": "10.0.0.1", "main": True},
+                                        {"name": "Office", "mac": "48:22:54:d5:5e:14", "ip": "10.0.0.2", "main": False}]
+        for n in self.app.deco_state["nodes"]:
+            self.app.seen(n["mac"], n["ip"], "", self.now)
+        d = self.devices()
+        self.assertEqual([(d[m]["infra"], d[m]["unit"], d[m]["unit_main"]) for m in ("48:22:54:d5:5e:10", "48:22:54:d5:5e:14")],
+                         [("router", "Living Room", 1), ("mesh", "Office", 0)])
+
+
 class Threats(Case):
     """Lookups of names on the malware and phishing list are reported with the device that made them."""
 
