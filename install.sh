@@ -5,6 +5,23 @@ set -euo pipefail
 [[ $EUID -eq 0 ]] || { echo "Run with sudo." >&2; exit 1; }
 SRC="$(cd "$(dirname "$0")" && pwd)"
 
+# Options given on an earlier run are remembered, so an update needs none of them repeated.
+# Anything set on the command line this time wins. Only what was actually given is kept:
+# what the installer worked out for itself is worked out afresh each time.
+CONF="${NETINV_CONF:-/etc/netinv/install.conf}"
+if [[ -f "$CONF" ]]; then
+  while IFS='=' read -r key value; do
+    case "$key" in
+      IFACE|GATEWAY|UPSTREAM1|UPSTREAM2|PORT|NOTIFY_URL|ENCRYPTED_DNS)
+        if [[ -z "${!key:-}" ]]; then printf -v "$key" '%s' "$value"; fi ;;
+    esac
+  done < "$CONF"
+fi
+GIVEN=""
+for key in IFACE GATEWAY UPSTREAM1 UPSTREAM2 PORT NOTIFY_URL ENCRYPTED_DNS; do
+  if [[ -n "${!key:-}" ]]; then GIVEN+="$key=${!key}"$'\n'; fi
+done
+
 IFACE="${IFACE:-$(ip -4 route show default | awk '{for(i=1;i<=NF;i++) if($i=="dev"){print $(i+1); exit}}')}"
 GATEWAY="${GATEWAY:-$(ip -4 route show default | awk '{print $3; exit}')}"
 PI_CIDR="$(ip -4 -o addr show dev "$IFACE" | awk '{print $4}' | head -1)"
@@ -38,6 +55,8 @@ id netinv &>/dev/null || useradd --system --no-create-home --shell /usr/sbin/nol
 install -d -o netinv -g netinv -m 750 /var/lib/netinv
 install -d -o root -g netinv -m 750 /var/log/netinv
 install -d /opt/netinv
+install -d -m 755 "$(dirname "$CONF")"
+(umask 077; printf '%s' "$GIVEN" > "$CONF")
 install -m 644 "$SRC/netinv.py" "$SRC/deco.py" "$SRC/dashboard.html" /opt/netinv/
 # The block list lives outside /var/lib/netinv so dnsmasq (another user) can read it.
 install -d -o netinv -g netinv -m 755 "$BLOCK_DIR"

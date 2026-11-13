@@ -87,11 +87,12 @@ Set these in front of the command, for example `sudo ENCRYPTED_DNS=1 ./install.s
 
 ```
 cd netinv
-git pull
-sudo ./install.sh
+./update.sh
 ```
 
-Pass the same options you used the first time. Your data is kept.
+That fetches the latest version and reinstalls it. Your data is kept, and so are the installer options you used before: they are remembered in `/etc/netinv/install.conf`. To change one, run the installer with it once, for example `sudo PORT=9090 ./install.sh`.
+
+If you installed before `update.sh` existed, run `git pull` and `sudo ./install.sh` (with your options) one last time.
 
 ## Using it
 
@@ -137,6 +138,7 @@ Be clear-eyed about what a DNS-based tool can and cannot do.
 - **Guesses are guesses.** Device types and activity categories come from a built-in list of well-known services in `netinv.py`. Anything not on it shows as "Other sites".
 - **Phones use private hardware addresses.** A phone that rotates its address shows up as a new device each time.
 - **"Online" is approximate.** A sleeping phone often does not answer the sweep. Connecting a Deco makes this more accurate.
+- **Isolated devices are out of reach.** A device you put in Device Isolation in the Deco app cannot talk to the Pi, so netinv sees none of its lookups and cannot block anything for it. With a Deco connected, netinv marks such devices "isolated" and stops warning that they are silent. It works this out from the Deco calling a device online while the Pi cannot reach it, so treat the label as a strong hint.
 - **The Pi becomes a dependency.** If it is off, nothing on your network can look up addresses. Adding a second DNS server on the router avoids that, but lets devices skip netinv whenever they like.
 - **IPv6.** If your provider gives you IPv6, your router may advertise its own IPv6 DNS server alongside the Pi. Turn that off in the router if it has the setting.
 - **Locked-down routers.** If yours will not let you change the DNS server, the workaround is to turn off its DHCP and let dnsmasq on the Pi do that job too. netinv does not set this up for you.
@@ -150,6 +152,7 @@ Be clear-eyed about what a DNS-based tool can and cannot do.
   - Your DNS lookups, to the upstream servers, as with any DNS setup.
   - A connection check to `1.1.1.1` and `9.9.9.9` every minute.
   - Block lists you switch on, downloaded daily from GitHub.
+  - The public register of hardware makers, downloaded about once a month from the IEEE, so devices show who made them. Nothing about your devices is sent. Turn it off with `--oui-url ""`.
   - A speed test download from Cloudflare, when you press the button.
   - Alerts, to the address you configure, if you configure one.
 - **Forgot the dashboard password?** On the Pi: `sudo -u netinv python3 /opt/netinv/netinv.py --reset-password`. This also removes the stored Deco password.
@@ -162,6 +165,8 @@ Be clear-eyed about what a DNS-based tool can and cannot do.
 |---|---|
 | `/opt/netinv/` | `netinv.py` (everything), `deco.py` (Deco client), `dashboard.html` |
 | `/var/lib/netinv/netinv.db` | All data |
+| `/var/lib/netinv/oui.tsv` | Who makes which hardware addresses, refreshed monthly |
+| `/etc/netinv/install.conf` | The installer options you gave, remembered for updates |
 | `/var/lib/netinv-dns/` | Block files that netinv writes and dnsmasq reads |
 | `/var/log/netinv/dnsmasq.log` | Raw lookups, rotated daily, kept 3 days |
 | `/etc/dnsmasq.d/netinv.conf` | dnsmasq settings |
@@ -178,9 +183,11 @@ journalctl -u netinv -f
 
 ```
 sudo systemctl disable --now netinv netinv-blocklist.path dnsmasq
-sudo rm -rf /opt/netinv /var/lib/netinv /var/lib/netinv-dns /var/log/netinv \
+sudo rm -rf /opt/netinv /etc/netinv /var/lib/netinv /var/lib/netinv-dns /var/log/netinv \
   /etc/dnsmasq.d/netinv.conf /etc/logrotate.d/netinv /etc/systemd/system/netinv*
 ```
+
+**Tests:** `python3 -m unittest discover tests` and `node tests/test_dashboard.js`. They need nothing installed and do not touch the network.
 
 ## Status
 

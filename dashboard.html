@@ -537,7 +537,8 @@ function renderMap(list){
     g.items.sort((a, b) => (b.online - a.online) || (b.queries - a.queries));
     g.rings = !meshed ? ringsOf(g.items, 128, 100, 96) : g.items.length > 14 ? ringsOf(g.items, 110, 84, 84)
       : g.items.length ? [{r:Math.max(104, g.items.length * 84 / (2 * Math.PI)), items:g.items}] : [];
-    g.ext = (g.rings.length ? g.rings[g.rings.length - 1].r : 0) + (meshed ? 58 : 74);
+    g.zig = meshed && g.rings.length === 1 && g.items.length >= 6 && g.items.length % 2 === 0 ? 24 : 0;   // see the drawing loop
+    g.ext = (g.rings.length ? g.rings[g.rings.length - 1].r : 0) + g.zig + (meshed ? 58 : 74);
     g.x = g.y = 0; g.start = -Math.PI / 2;
   }
   if (sats.length) {  // satellites sit round the main unit, each given as much of the circle as its cluster needs
@@ -553,23 +554,26 @@ function renderMap(list){
     });
     // turn the main unit's own devices so that as few as possible sit on a line out to a satellite
     const trunks = sats.map(g => Math.atan2(g.y, g.x)), turn = (a, t) => Math.abs(Math.atan2(Math.sin(a - t), Math.cos(a - t)));
+    const off = (r, d) => d >= Math.PI / 2 ? r : r * Math.sin(d);   // how far a device at radius r, d radians round from a line, is from it
     const clear = s => Math.min(Infinity, ...centre.rings.flatMap((ring, k) => ring.items.map((_, j) =>
-      Math.min(...trunks.map(t => turn(s + 2 * Math.PI * j / ring.items.length + (k % 2 ? Math.PI / ring.items.length : 0), t))) * ring.r)));
+      Math.min(...trunks.map(t => off(ring.r + (j % 2 ? centre.zig : 0), turn(s + 2 * Math.PI * j / ring.items.length + (k % 2 ? Math.PI / ring.items.length : 0), t)))))));
     let best = -1;
-    for (let i = 0; i < 90; i++) { const s = -Math.PI / 2 + i * Math.PI / 180, c = clear(s); if (c > best + .5) { best = c; centre.start = s; } }
+    for (let i = 0; i < 360; i++) { const s = -Math.PI / 2 + i * Math.PI / 180, c = clear(s); if (c > best + .5) { best = c; centre.start = s; } }
   }
   const links = [], marks = [], hubs = [];
-  const mark = (d, x, y, rad, cls, kind, label, tip) => {
+  const mark = (d, x, y, rad, cls, kind, label, tip, above) => {
     const go = d ? () => select(d.mac) : null;
     return svgEl("g", {class:"node " + cls + (d && d.mac === selected ? " sel" : ""), transform:`translate(${x.toFixed(1)} ${y.toFixed(1)})`,
         tabindex: d ? 0 : null, role: d ? "button" : null, "data-mac": d ? d.mac : null, "aria-label": d ? tip.replace(/ · /g, ", ") : null,
         onclick:go, onkeydown: d ? e => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); go(); } } : null},
-      svgEl("title", {}, tip), svgEl("circle", {r:rad.toFixed(1)}), glyph(kind), svgEl("text", {y:(rad + 14).toFixed(1)}, label));
+      svgEl("title", {}, tip), svgEl("circle", {r:rad.toFixed(1)}), glyph(kind), svgEl("text", {y:(above ? -rad - 7 : rad + 14).toFixed(1)}, label));
   };
   for (const g of [centre, ...sats]) {
     g.rings.forEach((ring, k) => ring.items.forEach((d, j) => {
       const n = ring.items.length, a = g.start + 2 * Math.PI * j / n + (k % 2 ? Math.PI / n : 0);
-      const x = g.x + Math.cos(a) * ring.r, y = g.y + Math.sin(a) * ring.r, w = Math.sqrt(d.queries / maxQ), rad = (meshed ? 15 : 17) + (meshed ? 7 : 8) * w;
+      // in a full single ring every other device steps outwards, so neighbouring labels land on different lines
+      const rr = ring.r + (j % 2 ? g.zig : 0);
+      const x = g.x + Math.cos(a) * rr, y = g.y + Math.sin(a) * rr, w = Math.sqrt(d.queries / maxQ), rad = (meshed ? 15 : 17) + (meshed ? 7 : 8) * w;
       links.push(svgEl("line", {class:"link" + (d.online && d.queries ? " on" : ""), x1:g.x.toFixed(1), y1:g.y.toFixed(1), x2:x.toFixed(1), y2:y.toFixed(1), "stroke-opacity": d.online ? (.3 + .7 * w).toFixed(2) : .5}));
       marks.push(mark(d, x, y, rad, (d.online ? "on" : "") + (d.known ? "" : " new"), kindOf(d), short(devName(d), meshed ? 15 : 18),
         `${devName(d)}${d.known ? "" : " (new)"} · ${d.online ? "online" : "offline"}${d.mostly ? " · " + d.mostly : ""}`));
@@ -578,7 +582,7 @@ function renderMap(list){
     const name = meshed && g.name ? unitLabel(g.name) : g.hub ? devName(g.hub) : "Your network";
     if (!main) links.unshift(svgEl("line", {class:"link trunk" + (!g.hub || g.hub.online ? " on" : ""), x1:0, y1:0, x2:g.x.toFixed(1), y2:g.y.toFixed(1)}));
     hubs.push(mark(g.hub, g.x, g.y, main ? 27 : 22, "hub", "router", meshed ? `${short(name, 20)} · ${g.items.length}` : short(name),
-      meshed ? `${name} · ${count} connected through it${g.hub && !g.hub.online ? " · offline" : ""}` : name));
+      meshed ? `${name} · ${count} connected through it${g.hub && !g.hub.online ? " · offline" : ""}` : name, !main && g.y < -40));
   }
   const all = [centre, ...sats], x0 = Math.min(...all.map(g => g.x - g.ext)), x1 = Math.max(...all.map(g => g.x + g.ext)),
     y0 = Math.min(...all.map(g => g.y - g.ext)), y1 = Math.max(...all.map(g => g.y + g.ext));
@@ -954,13 +958,13 @@ function renderDevices(){
     const name = devName(d);
     const conn = connName(d.conn_live || d.conn).replace("Wi-Fi ", "");
     const sub = [isGuess(d) ? "guessed from its activity" : null, d.owner || null, conn || null, nodeName(d) || null, isUnnamed(d) && d.vendor && d.vendor !== name ? d.vendor : null, d.ip,
-      isReal(d) ? null : "seen only by its lookups"].filter(Boolean).join(" · ");
+      d.isolated ? "isolated" : null, isReal(d) ? null : "seen only by its lookups"].filter(Boolean).join(" · ");
     return clickRow(() => select(d.mac), {class: d.mac === selected ? "sel" : "", "data-mac":d.mac, "aria-selected": d.mac === selected ? "true" : null},
       el("td", {}, el("div", {class:"dev"}, icon(d), el("div", {},
         el("div", {class:"nm"}, name, d.known ? null : el("span", {class:"tag new"}, "new"),
           d.net === "guest" ? el("span", {class:"tag", title:"Connected to your guest Wi-Fi"}, "guest") : null),
         el("div", {class:"sub"}, sub)))),
-      el("td", {class: d.mostly ? "" : "mute"}, d.mostly || (isSilent(d) ? "Nothing visible" : d.infra ? "Runs the network" : "–"),
+      el("td", {class: d.mostly ? "" : "mute"}, d.mostly || (d.isolated ? "Isolated from the Pi" : isSilent(d) ? "Nothing visible" : d.infra ? "Runs the network" : "–"),
         d.hidden ? el("span", {class:"tag", title:"Uses a VPN, iCloud Private Relay or private DNS: part of what it does is not visible"}, "partly hidden") : null),
       el("td", {class:"num hide-s", title:sparkTip(d.spark)}, spark(d.spark, 84, 22), el("div", {class:"cnt"}, fmt(d.queries)),
         d.down > 2000 || d.up > 2000 ? el("div", {class:"cnt rate", title:"Speed right now, from the Deco"}, `↓ ${fmtRate(d.down)}`) : null),
@@ -1039,7 +1043,7 @@ function detailHead(d){
     el("dl", {}, row("IP address", d.ip, 1), row("IPv6 address", d.ip6, 1),
       row("Hardware address (MAC)", real ? d.mac + (d.randomized ? "  (private: made up by the device for this network)" : "") : "not seen", 1),
       row("Connection", [connName(d.conn_live || d.conn), d.net === "guest" ? "guest network" : ""].filter(Boolean).join(", ")),
-      row("Connects through", nodeName(d)),
+      row("Connects through", nodeName(d)), row("Reachable from the Pi", d.isolated ? "No (isolated in the Deco app?)" : ""),
       row("Name in the Deco app", d.deco_name), row("Name it announces", d.mdns), row("Name from the router", d.hostname),
       row("Services it announces", (d.services || "").split(",").filter(Boolean).join(", ")), row("Maker", d.vendor), row("Looks like", d.hint),
       row("First seen", real && d.first_seen ? new Date(d.first_seen*1000).toLocaleString([], {dateStyle:"medium", timeStyle:"short"}) : null)),
@@ -1047,7 +1051,7 @@ function detailHead(d){
   return [
     el("div", {class:"dtitle"}, icon(d, true),
       el("div", {}, el("h2", {}, devName(d), d.known ? null : el("span", {class:"tag new"}, "new")),
-        el("div", {class:"dstate"}, [d.online ? "Online now" : "Offline, last seen " + ago(d.last_seen), d.owner, connName(d.conn_live || d.conn), nodeName(d),
+        el("div", {class:"dstate"}, [d.online ? "Online now" : "Offline, last seen " + ago(d.last_seen), d.owner, connName(d.conn_live || d.conn), nodeName(d), d.isolated ? "isolated" : "",
           d.net === "guest" ? "guest Wi-Fi" : "", isGuess(d) ? "name is a guess" : ""].filter(Boolean).join(" · "))),
       el("button", {class:"x", "aria-label":"Close device details", title:"Close", onclick:deselect}, "×")),
     !real ? el("p", {class:"mute", style:"margin-top:12px"}, "netinv saw lookups from this address but never matched it to a device, so it cannot be named.") : null,
@@ -1094,6 +1098,7 @@ async function renderDetail(refresh){
   const ports = data.ports;
   fill($("#dact"),
     el("p", {class:"say"}, d.infra && !data.activity.length ? "This is part of the network itself (your router, a mesh unit, or the Pi running netinv). It does not ask netinv for addresses, so nothing shows here. That is normal."
+      : d.isolated && !data.activity.length ? "Your Deco reports it online, but it does not answer the Pi. That is what Device Isolation in the Deco app does. Its lookups cannot reach netinv either, so nothing shows here and blocks do not apply to it."
       : isSilent(d) && range === 24 ? (d.last_lookup ? `Nothing in the last 24 hours. It last looked something up ${ago(d.last_lookup)}. Appliances often go days between lookups, so that is normal.`
         : "It is online, but netinv has seen nothing from it for a week. It may be using its own DNS or a VPN.") : sentence(data.activity)),
     u.down || u.up || d.down || d.up ? el("div", {class:"kv", title:"Worked out from the speeds your Deco reports every half minute, so treat it as a rough figure"},

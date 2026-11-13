@@ -165,6 +165,12 @@ def _name(value):
         return str(value)
 
 
+def _conn(v):
+    """How a device is connected. The Deco answers the literal word "undefined" when it does not know."""
+    v = str(v or "").strip()
+    return "" if v.lower() in ("undefined", "null", "none", "unknown") else v
+
+
 class Deco:
     def __init__(self, host, password, username="admin", timeout=10):
         host = host.strip().rstrip("/")
@@ -273,7 +279,7 @@ class Deco:
                 continue
             kbit = lambda v: int(float(v or 0) * 125)  # the Deco reports kilobits per second
             out.append({"mac": mac, "name": _name(c.get("name")), "ip": c.get("ip") or "", "online": bool(c.get("online")),
-                        "conn": c.get("connection_type") or "", "net": c.get("interface") or "",
+                        "conn": _conn(c.get("connection_type")), "net": c.get("interface") or "",
                         "down": kbit(c.get("down_speed")), "up": kbit(c.get("up_speed"))})
         return out
 

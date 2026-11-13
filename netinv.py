@@ -49,7 +49,8 @@ CREATE TABLE IF NOT EXISTS dns_hourly(
   dev TEXT, domain TEXT, base TEXT, hour INTEGER, count INTEGER,
   PRIMARY KEY(dev, domain, hour)) WITHOUT ROWID;
 CREATE INDEX IF NOT EXISTS dns_hour ON dns_hourly(hour);
-CREATE INDEX IF NOT EXISTS dns_base ON dns_hourly(base);
+CREATE INDEX IF NOT EXISTS dns_base_hour ON dns_hourly(base, hour);
+DROP INDEX IF EXISTS dns_base;
 CREATE TABLE IF NOT EXISTS meta(k TEXT PRIMARY KEY, v TEXT);
 CREATE TABLE IF NOT EXISTS blocked(domain TEXT PRIMARY KEY, added INTEGER);
 CREATE TABLE IF NOT EXISTS dismissed(key TEXT PRIMARY KEY, ts INTEGER);
@@ -72,6 +73,7 @@ MIGRATIONS = [
     ("devices", "net", "TEXT DEFAULT ''"), ("devices", "parent", "TEXT DEFAULT ''"),
     ("devices", "owner", "TEXT DEFAULT ''"), ("devices", "node", "TEXT DEFAULT ''"), ("dns_hourly", "blocked", "INTEGER DEFAULT 0"),
     ("blocked", "t_from", "INTEGER"), ("blocked", "t_to", "INTEGER"),
+    ("devices", "arp_seen", "INTEGER DEFAULT 0"),
 ]
 SESSION_DAYS = 30
 SPEED_URL = "https://speed.cloudflare.com/__down?bytes=50000000"  # the server refuses much larger requests
@@ -172,6 +174,37 @@ QUERY_RE = re.compile(
 DOMAIN_RE = re.compile(r"(?=.{4,253}$)(?:[a-z0-9_](?:[a-z0-9_-]{0,61}[a-z0-9_])?\.)+[a-z][a-z0-9-]{1,62}")
 PI_VENDOR = "this Pi (netinv)"
 SILENT_DAYS = 7  # an online device with no lookups for this long is flagged as bypassing netinv
+ARP_TRUST = 600  # seconds the Pi's own sighting of an address outranks what the Deco says about it
+CUT_OFF = 1800   # online according to the Deco but unanswered by the Pi for this long: isolated from the Pi
+OUI_URL = "https://standards-oui.ieee.org/oui/oui.csv"  # the public register of who makes which hardware addresses
+CONN_NAMES = {"wired": "Wired", "band2_4": "Wi-Fi 2.4 GHz", "band5": "Wi-Fi 5 GHz", "band6": "Wi-Fi 6 GHz"}
+
+# What a device calls itself is better evidence of what it is than what it looks up.
+NAME_HINTS = [(re.compile(p, re.I), hint) for p, hint in [
+    (r"lg ?webos|webostv", "LG TV"), (r"lg_smart_", "LG smart appliance"), (r"litter-?robot", "Litter-Robot"),
+    (r"rachio", "Rachio sprinkler controller"), (r"\bmyq\b", "myQ garage door opener"),
+    (r"\b(hs|kp|ep|ks|kl|lb)\d{3}\b", "TP-Link / Kasa smart device"), (r"levoit", "Levoit appliance"),
+    (r"\bbrw[0-9a-f]{12}\b|brother", "Brother printer"), (r"nanoleaf", "Nanoleaf light"), (r"narwal", "Narwal robot vacuum"),
+    (r"vivint", "Vivint security hub"), (r"hubspace", "Hubspace smart device"), (r"roomba|irobot", "Robot vacuum (iRobot)"),
+    (r"\biphone\b", "iPhone"), (r"\bipad\b", "iPad"), (r"macbook|\bimac\b", "Mac"), (r"apple-?watch", "Apple Watch"),
+    (r"chromecast", "Chromecast"), (r"\broku", "Roku"), (r"nintendo", "Nintendo console"), (r"playstation|\bps[45]\b", "PlayStation"),
+    (r"xbox", "Xbox"), (r"wyze", "Wyze camera or sensor"), (r"sonos", "Sonos speaker"), (r"reolink|\bnvr\b", "Camera recorder"),
+    (r"espressif|\besp[-_ ]?(32|8266)", "Small Wi-Fi gadget (Espressif chip)"),
+]]
+
+
+def name_hint(r):
+    text = " ".join(r.get(k) or "" for k in ("deco_name", "mdns", "hostname"))
+    return next((hint for rx, hint in NAME_HINTS if rx.search(text)), "") if text.strip() else ""
+
+
+def parse_oui(text):
+    """The IEEE register (CSV: registry, 6 hex digits, organisation, address) as {"AABBCC": "Maker"}."""
+    out = {}
+    for row in csv.reader(io.StringIO(text)):
+        if len(row) >= 3 and re.fullmatch(r"[0-9A-Fa-f]{6}", row[1].strip()):
+            out[row[1].strip().upper()] = " ".join(row[2].split())[:80]
+    return out
 SECOND_LEVEL = {"co", "com", "net", "org", "gov", "ac", "edu", "or", "ne", "go"}
 
 # Lookups that give away what a device is, for devices that report no name.
@@ -350,13 +383,20 @@ class App:
         self.lock = threading.Lock()
         self.db = sqlite3.connect(a.db, check_same_thread=False)
         self.db.row_factory = sqlite3.Row
-        self.db.executescript("PRAGMA journal_mode=WAL;" + SCHEMA)
+        self.db.executescript("PRAGMA journal_mode=WAL; PRAGMA synchronous=NORMAL;" + SCHEMA)
+        self.cache = {}  # answers the dashboard asks for again and again; thrown away whenever anything is written
         for table, col, decl in MIGRATIONS:  # columns added since the first release
             if col not in {r[1] for r in self.db.execute(f"PRAGMA table_info({table})")}:
                 self.db.execute(f"ALTER TABLE {table} ADD COLUMN {col} {decl}")
         self.db.commit()
+        self.db.execute("UPDATE devices SET conn='' WHERE conn='undefined'")  # the Deco's word for "do not know", stored by older versions
+        self.db.commit()
         self.ipmap = {}
-        for r in self.q("SELECT mac, ip, ip6 FROM devices"):
+        self.arp_ip, self.arp_mac = {}, {}  # what the Pi's own sweep last saw: ip -> (mac, when), mac -> (ip, when)
+        self.oui, self.oui_tried = {}, 0
+        self.load_oui()
+        # oldest first, so where two devices are on record with one address the one seen last has it
+        for r in self.q("SELECT mac, ip, ip6 FROM devices ORDER BY last_seen"):
             for ip in (r["ip"], r["ip6"]):
                 if ip:
                     self.ipmap[ip] = r["mac"]
@@ -393,6 +433,18 @@ class App:
         with self.lock:
             (self.db.executemany if many else self.db.execute)(sql, args)
             self.db.commit()
+        self.cache.clear()
+
+    def cached(self, key, fn, ttl=5):
+        """One refresh of the dashboard asks for the device list three times over (list, attention, people),
+        and several people may have it open. Work it out once. Any write empties this, so it is never out of date
+        by more than what the writes do not cover: speeds and the time of the last sweep, a few seconds stale."""
+        hit = self.cache.get(key)
+        if hit and time.time() - hit[0] < ttl:
+            return hit[1]
+        value = fn()
+        self.cache[key] = (time.time(), value)
+        return value
 
     def meta(self, k, v=None):
         if v is None:
@@ -426,15 +478,30 @@ class App:
         return (r.get("label") or r.get("deco_name") or r.get("mdns") or r.get("hostname")
                 or r.get("vendor") or "unknown device")
 
-    def seen(self, mac, ip, vendor, now, first_sweep=False):
-        """Record that a device answered. Returns True when it is one we have never seen."""
+    def seen(self, mac, ip, vendor, now, first_sweep=False, arp=True, claim=True):
+        """Record that a device answered. Returns True when it is one we have never seen.
+        arp=False means the Deco says so, not the Pi's own sweep. The Deco's list lags behind: it goes on
+        reporting an address for a device after the router has handed that address to another. Believing it
+        credits one device's lookups to another, so where the sweep has recently seen otherwise, the sweep wins.
+        claim=False records the device without making it the one lookups from that address are credited to."""
+        if ip and not arp:
+            holder, mine = self.arp_ip.get(ip), self.arp_mac.get(mac)
+            if (holder and holder[0] != mac and now - holder[1] < ARP_TRUST) or (mine and mine[0] != ip and now - mine[1] < ARP_TRUST):
+                ip = ""
+        elif ip:
+            self.arp_mac[mac] = (ip, now)
+            if claim:
+                self.arp_ip[ip] = (mac, now)
+        if not vendor and not is_randomized(mac):
+            vendor = self.oui.get(mac[:8].replace(":", "").upper(), "")
         new = not self.q("SELECT 1 FROM devices WHERE mac=?", (mac,))
-        self.x("""INSERT INTO devices(mac, ip, vendor, randomized, first_seen, last_seen)
-                  VALUES(?,?,?,?,?,?) ON CONFLICT(mac) DO UPDATE SET
+        self.x("""INSERT INTO devices(mac, ip, vendor, randomized, first_seen, last_seen, arp_seen)
+                  VALUES(?,?,?,?,?,?,?) ON CONFLICT(mac) DO UPDATE SET
                   ip=CASE WHEN excluded.ip!='' THEN excluded.ip ELSE ip END, last_seen=excluded.last_seen,
+                  arp_seen=CASE WHEN excluded.arp_seen THEN excluded.arp_seen ELSE arp_seen END,
                   vendor=CASE WHEN excluded.vendor!='' THEN excluded.vendor ELSE vendor END""",
-               (mac, ip, vendor, is_randomized(mac), now, now))
-        if ip:
+               (mac, ip, vendor, is_randomized(mac), now, now, now if arp else 0))
+        if ip and claim:
             self.ipmap[ip] = mac
             self.adopt("ip:" + ip, mac)
         if new and not first_sweep:
@@ -464,8 +531,17 @@ class App:
             except OSError:
                 pass
         first_sweep = not self.q("SELECT 1 FROM devices LIMIT 1")  # everything is new then; say nothing
+        by_ip = collections.defaultdict(list)
+        for mac, (ip, _) in found.items():
+            by_ip[ip].append(mac)
         for mac, (ip, vendor) in found.items():
-            self.seen(mac, ip, vendor, now, first_sweep)
+            # two devices answering for one address (a TV on cable and Wi-Fi at once): lookups stay with whichever had them
+            owner = self.ipmap.get(ip) if self.ipmap.get(ip) in by_ip[ip] else by_ip[ip][0]
+            self.seen(mac, ip, vendor, now, first_sweep, claim=mac == owner)
+        # an address that has moved on is no longer its previous holder's
+        stale = [(r["mac"],) for r in self.q("SELECT mac, ip FROM devices WHERE ip!=''") if r["ip"] in by_ip and r["mac"] not in by_ip[r["ip"]]]
+        if stale:
+            self.x("UPDATE devices SET ip='' WHERE mac=?", stale, many=True)
         # IPv6 neighbours, so lookups arriving over v6 still map to a device
         if self.a.iface and shutil.which("ip"):
             for line in run(["ip", "-6", "neigh", "show", "dev", self.a.iface]).splitlines():
@@ -512,6 +588,7 @@ class App:
                                    DO UPDATE SET count=count+excluded.count, blocked=blocked+excluded.blocked""", (mac, orphan))
                 self.db.execute("DELETE FROM dns_hourly WHERE dev=?", (orphan,))
                 self.db.commit()
+                self.cache.clear()
 
     def resolve_names(self, now):
         rows = self.q("SELECT mac, ip FROM devices WHERE last_seen=? AND host_checked<? LIMIT 10",
@@ -533,11 +610,19 @@ class App:
         """Ask the network what devices announce about themselves (names, and services that give away the type)."""
         if not shutil.which("avahi-browse"):
             return
-        for ip, info in parse_mdns(run(["avahi-browse", "-atrp"], timeout=20)).items():
-            mac = self.ipmap.get(ip)
-            if mac:
-                self.x("UPDATE devices SET mdns=?, services=? WHERE mac=?",
-                       (info["name"][:80], ",".join(sorted(info["services"]))[:300], mac))
+        self.record_mdns(parse_mdns(run(["avahi-browse", "-atrp"], timeout=20)))
+
+    def record_mdns(self, by_ip):
+        got = {self.ipmap[ip]: info for ip, info in by_ip.items() if ip in self.ipmap}
+        for mac, info in got.items():
+            self.x("UPDATE devices SET mdns=?, services=? WHERE mac=?",
+                   (info["name"][:80], ",".join(sorted(info["services"]))[:300], mac))
+        # a name now announced by one device is no longer another's: it was pinned on that one by a recycled address
+        owner = {info["name"][:80]: mac for mac, info in got.items() if info["name"]}
+        moved = [(r["mac"],) for r in self.q("SELECT mac, mdns FROM devices WHERE mdns!=''")
+                 if r["mac"] not in got and owner.get(r["mdns"], r["mac"]) != r["mac"]]
+        if moved:
+            self.x("UPDATE devices SET mdns='', services='' WHERE mac=?", moved, many=True)
 
     def scanner(self):
         n = 0
@@ -579,10 +664,12 @@ class App:
         for c in clients:
             mac = c["mac"]
             if c["online"]:
-                self.seen(mac, c["ip"], "", now)
+                self.seen(mac, c["ip"], "", now, arp=False)
             elif not self.q("SELECT 1 FROM devices WHERE mac=?", (mac,)):
                 continue  # the Deco remembers devices from long ago; do not import ghosts
-            self.x("UPDATE devices SET deco_name=?, conn=?, net=? WHERE mac=?", (c["name"][:80], c["conn"], c["net"], mac))
+            # an unknown connection (the Deco says so for devices that are off) keeps the last known one
+            self.x("UPDATE devices SET deco_name=?, conn=CASE WHEN ?!='' THEN ? ELSE conn END, net=? WHERE mac=?",
+                   (c["name"][:80], c["conn"], c["conn"], c["net"], mac))
             if c["online"] and (c["down"] or c["up"]):
                 speed[mac] = (c["down"], c["up"])
                 if dt:
@@ -661,6 +748,7 @@ class App:
                     self.health_tick()
                 if n % 120 == 0:
                     self.refresh_lists()
+                    self.refresh_oui()
                     old = int(time.time()) - self.a.retention_days * 86400
                     for t in ("events", "health", "speed"):
                         self.x(f"DELETE FROM {t} WHERE ts<?", (old,))
@@ -670,6 +758,50 @@ class App:
                 print("monitor error:", e, flush=True)
             n += 1
             time.sleep(30)
+
+    # ---- who makes what: the IEEE register of hardware-address prefixes ----
+    def oui_path(self):
+        return os.path.join(os.path.dirname(os.path.abspath(self.a.db)), "oui.tsv")
+
+    def load_oui(self):
+        try:
+            with open(self.oui_path(), encoding="utf-8") as f:
+                self.oui = dict(line.rstrip("\n").split("\t", 1) for line in f if "\t" in line)
+        except OSError:
+            self.oui = {}
+
+    def refresh_oui(self, force=False):
+        """arp-scan ships a maker list that is years old on most systems, so half of a modern home shows no maker.
+        Fetch the register itself once a month and fill in what is missing. Failing is fine: try again in six hours."""
+        now = time.time()
+        try:
+            fresh = now - os.stat(self.oui_path()).st_mtime < 30 * 86400
+        except OSError:
+            fresh = False
+        if not self.a.oui_url or (not force and (fresh or now - self.oui_tried < 6 * 3600)):
+            return
+        self.oui_tried = now
+        try:
+            req = urllib.request.Request(self.a.oui_url, headers={"User-Agent": "Mozilla/5.0 (compatible; netinv)"})
+            with urllib.request.urlopen(req, timeout=60) as r:
+                table = parse_oui(r.read(40_000_000).decode("utf-8", "replace"))
+            if len(table) < 1000:
+                raise ValueError("the register came back nearly empty")
+        except (OSError, ValueError) as e:
+            print("maker list not refreshed:", e, flush=True)
+            return
+        tmp = self.oui_path() + ".tmp"
+        with open(tmp, "w", encoding="utf-8") as f:
+            f.writelines(f"{k}\t{v}\n" for k, v in sorted(table.items()))
+        os.replace(tmp, self.oui_path())
+        self.oui = table
+        self.fill_makers()
+
+    def fill_makers(self):
+        rows = [(self.oui[k], r["mac"]) for r in self.q("SELECT mac FROM devices WHERE (vendor IS NULL OR vendor='') AND randomized=0")
+                for k in [r["mac"][:8].replace(":", "").upper()] if k in self.oui]
+        if rows:
+            self.x("UPDATE devices SET vendor=? WHERE mac=?", rows, many=True)
 
     def api_health(self, p):
         now = int(time.time())
@@ -814,6 +946,9 @@ class App:
         return {**site(name), "blocked": self.is_blocked(name)}
 
     def api_summary(self, p):
+        return self.cached("summary", self.summary)
+
+    def summary(self):
         now = int(time.time())
         day = now - 86400
         d = self.q("""SELECT COUNT(*) total, COALESCE(SUM(last_seen>=?),0) online,
@@ -821,10 +956,13 @@ class App:
         t = self.q("""SELECT COALESCE(SUM(count),0) queries, COALESCE(SUM(blocked),0) refused,
                       COUNT(DISTINCT base) domains FROM dns_hourly WHERE hour>=?""", (day,))[0]
         named = lambda rows: [{**r, **self.site(r["name"])} for r in rows]
-        top = self.q("""SELECT base name, SUM(count) c, COUNT(DISTINCT dev) devs FROM dns_hourly
-                        WHERE hour>=? GROUP BY base ORDER BY c DESC LIMIT 15""", (day,))
+        top = self.q("""SELECT base name, SUM(count) c, COUNT(DISTINCT dev) devs FROM dns_hourly INDEXED BY dns_hour
+                        WHERE hour>=? GROUP BY base ORDER BY c DESC, name LIMIT 15""", (day,))
+        # sites never seen before today: today's sites, less any with an earlier row
         fresh = self.q("""SELECT base name, MIN(hour) first, SUM(count) c, COUNT(DISTINCT dev) devs
-                          FROM dns_hourly GROUP BY base HAVING first>=? ORDER BY first DESC, c DESC LIMIT 15""", (day,))
+                          FROM dns_hourly d INDEXED BY dns_hour WHERE hour>=?
+                          AND NOT EXISTS (SELECT 1 FROM dns_hourly o WHERE o.base=d.base AND o.hour<?)
+                          GROUP BY base ORDER BY first DESC, c DESC LIMIT 15""", (day, day))
         return {
             **d, **t, "last_scan": self.last_scan, "now": now, "activity": self.day_activity()[1],
             "can_block": bool(self.a.block_file), "blocked": sorted(self.block_active),
@@ -863,25 +1001,33 @@ class App:
         bases = sorted({base_domain(s) for s in HINT_SUFFIX})
         rows = self.q(f"""SELECT dev, domain, SUM(count) c FROM dns_hourly WHERE hour>=? AND base IN
                           ({",".join("?" * len(bases))}) GROUP BY dev, domain""", (int(now) - 7 * 86400, *bases))
-        score = collections.defaultdict(collections.Counter)
+        score, kinds = collections.defaultdict(collections.Counter), collections.defaultdict(set)
         for r in rows:
             name = r["domain"]
             while name:  # suffix match: a.b.icloud.com -> b.icloud.com -> icloud.com
                 if name in HINT_SUFFIX:
                     guess, is_os = HINT_SUFFIX[name]
                     score[self.root(r["dev"])][(is_os, guess)] += r["c"]
+                    kinds[self.root(r["dev"]), guess].add(name)
                     break
                 name = name.partition(".")[2]
         out = {}
         for dev, s in score.items():
+            # A phone or PC talks to its maker in several ways all day; one stray name (an app on a TV checking in
+            # with Google) says nothing. Calling a fridge a "Windows PC" is worse than saying nothing.
+            s = {k: n for k, n in s.items() if n >= 3 and (not k[0] or len(kinds[dev, k[1]]) >= 2)}
+            if not s:
+                continue
             # an OS match wins unless something else dwarfs it (an Xbox pings Microsoft too)
             (is_os, guess), n = max(s.items(), key=lambda kv: kv[1] * (3 if kv[0][0] else 1))
-            if n >= 2:
-                out[dev] = guess
+            out[dev] = guess
         self.hint_cache = (now, out)
         return out
 
     def api_devices(self, p):
+        return self.cached("devices", self.devices)
+
+    def devices(self):
         now = int(time.time())
         day, week, cutoff = now - 86400, now - SILENT_DAYS * 86400, self.online_cutoff()
         rows = self.q("SELECT *, last_seen>=? online FROM devices ORDER BY known, online DESC, last_seen DESC", (cutoff,))
@@ -912,6 +1058,7 @@ class App:
                          1 known, 0 randomized, MIN(hour) first_seen, MAX(hour) last_seen, 0 online
                          FROM dns_hourly WHERE dev LIKE 'ip:%' GROUP BY dev""")
         hints, doing, sparks = self.hints(), self.day_activity()[0], self.sparks()
+        swept = self.deco_state["ok"] and self.last_scan > now - max(5 * self.a.scan_interval, 300)
         # A mesh unit shows up on the network under several faces: its own address, a neighbouring
         # hardware address (each radio and port has one, a digit apart), or simply the name "Deco".
         nodes = self.deco_state["nodes"]
@@ -928,7 +1075,7 @@ class App:
             r["last_lookup"] = last.get(mac, 0)  # 0: nothing in the last SILENT_DAYS days
             r["spark"] = sparks.get(mac) or [0] * 24
             cats = doing.get(mac, [])
-            r["hint"] = service_hint(r.get("services") or "") or hints.get(mac, "")
+            r["hint"] = name_hint(r) or service_hint(r.get("services") or "") or hints.get(mac, "")
             # the router, the mesh units and this Pi do not ask netinv for addresses, so silence from them is normal
             r["infra"] = ("router" if self.a.gateway and r["ip"] == self.a.gateway else "pi" if r["vendor"] == PI_VENDOR
                           else "mesh" if is_mesh(r) else "")
@@ -936,6 +1083,10 @@ class App:
             unit = r["infra"] and next((n for n in nodes if n.get("ip") and n["ip"] == r["ip"]
                                         or len(n.get("mac") or "") == 17 and n["mac"][:14] == mac[:14]), None)
             r["unit"], r["unit_main"] = (unit["name"][:60], int(bool(unit.get("main")))) if unit else ("", 0)
+            # The Deco says it is online, yet it has not answered the Pi's sweep for a good while: the two are being
+            # kept apart, which is what the Deco's Device Isolation does. Its lookups cannot reach netinv either.
+            r["isolated"] = int(bool(swept and r["online"] and not r["infra"] and not r["randomized"] and not mac.startswith("ip:")
+                                     and (r.get("arp_seen") or 0) < now - CUT_OFF and r["first_seen"] < now - CUT_OFF))
             r["mostly"] = mostly(cats)
             r["hidden"] = int(any(c["cat"] == HIDDEN for c in cats))
             fam = self.family(mac)
@@ -950,12 +1101,13 @@ class App:
         out = io.StringIO()
         w = csv.writer(out)
         w.writerow(["name", "person", "name_in_deco_app", "announced_name", "hostname", "looks_like", "maker", "ip", "mac",
-                    "connection", "deco_unit", "private_mac", "reviewed", "online", "first_seen", "last_seen", "lookups_24h", "mostly_24h"])
+                    "connection", "deco_unit", "private_mac", "reviewed", "online", "first_seen", "last_seen", "lookups_24h", "mostly_24h", "isolated"])
         for r in self.api_devices({}):
             w.writerow([safe(v) for v in (
                 r["label"], r.get("owner", ""), r.get("deco_name", ""), r.get("mdns", ""), r["hostname"] or "", r["hint"],
-                r["vendor"] or "", r["ip"] or "", "" if r["mac"].startswith("ip:") else r["mac"], r.get("conn", ""), r.get("node", ""),
-                r["randomized"], r["known"], r["online"], iso(r["first_seen"]), iso(r["last_seen"]), r["queries"], r["mostly"])])
+                r["vendor"] or "", r["ip"] or "", "" if r["mac"].startswith("ip:") else r["mac"],
+                CONN_NAMES.get(r.get("conn") or "", r.get("conn") or ""), r.get("node", ""),
+                r["randomized"], r["known"], r["online"], iso(r["first_seen"]), iso(r["last_seen"]), r["queries"], r["mostly"], r.get("isolated", 0))])
         return out.getvalue().encode("utf-8-sig")
 
     def api_device(self, p):
@@ -1042,7 +1194,7 @@ class App:
             found = []
             # Appliances look up their server once and then hold the connection for days, so a quiet
             # day means nothing. A quiet week from something that is online is worth a look.
-            if d["online"] and not d["last_lookup"] and not d["infra"] and now - d["first_seen"] > SILENT_DAYS * 86400:
+            if d["online"] and not d["last_lookup"] and not d["infra"] and not d["isolated"] and now - d["first_seen"] > SILENT_DAYS * 86400:
                 found.append({"kind": "silent"})
             if HIDDEN in cats:
                 found.append({"kind": "hidden", "services": cats[HIDDEN]["services"]})
@@ -1552,6 +1704,7 @@ def main():
     ap.add_argument("--list-base", default="", help="fetch block lists from <base>/<id> instead of their usual home (testing)")
     ap.add_argument("--notify-url", default="",
                     help="POST a line of text here when a new device joins (e.g. an ntfy.sh topic URL)")
+    ap.add_argument("--oui-url", default=OUI_URL, help="where to fetch the register of hardware makers; empty to never fetch")
     ap.add_argument("--no-probe", action="store_true", help="do not check internet reachability")
     ap.add_argument("--reset-password", action="store_true", help="remove the dashboard password (and the stored Deco password) and exit")
     ap.add_argument("--allow-host", action="append", default=[], help="extra hostname the dashboard is reached by")
