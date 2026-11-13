@@ -355,10 +355,10 @@ input[type=password]{flex:1 1 180px;max-width:360px}
 <div id="login" hidden>
   <form class="card" id="loginform">
     <h2>netinv</h2>
-    <p class="mute">This dashboard is locked. Enter its password.</p>
-    <div class="row"><input type="password" id="loginpw" autocomplete="current-password" placeholder="Password" aria-label="Dashboard password"><button class="act">Sign in</button></div>
+    <p class="mute" id="loginsay">This dashboard is locked. Enter its password.</p>
+    <div class="row"><input type="password" id="loginpw" autocomplete="current-password" placeholder="Password" aria-label="Dashboard password"><button class="act" id="loginbtn">Sign in</button></div>
     <p id="loginmsg" role="alert"></p>
-    <details><summary>Forgot the password?</summary><p class="mute" style="margin-top:8px">On the Pi, run this and then set a new one in Settings:</p><p class="mono">sudo -u netinv python3 /opt/netinv/netinv.py --reset-password</p></details>
+    <details id="loginhelp"><summary>Forgot the password?</summary><p class="mute" style="margin-top:8px">On the Pi, run this and then set a new one in Settings:</p><p class="mono">sudo -u netinv python3 /opt/netinv/netinv.py --reset-password</p></details>
   </form>
 </div>
 <div id="toast" role="status" aria-live="polite"></div>
@@ -378,16 +378,29 @@ function el(tag, attrs, ...kids){
   return e;
 }
 const fill = (node, ...kids) => node.replaceChildren(...nodes(kids));
-const api = p => fetch(p).then(r => { if (r.status === 401) showLogin(); if (!r.ok) throw new Error(r.status); return r.json(); });
-function showLogin(){
-  if (!$("#login").hidden) return;
-  $("#login").hidden = false; $("#loginpw").value = ""; $("#loginpw").focus();
+const api = p => fetch(p).then(async r => {
+  if (r.status === 401) showLogin((await r.json().catch(() => ({}))).setup);
+  if (!r.ok) throw new Error(r.status);
+  return r.json();
+});
+// The same screen asks for the password, or on first use asks you to choose one.
+function showLogin(setup){
+  const box = $("#login"), mode = setup ? "1" : "";
+  if (!box.hidden && box.dataset.setup === mode) return;
+  box.dataset.setup = mode;
+  $("#loginsay").textContent = setup ? "Choose a password for this dashboard. It shows what every device on your network does and can block sites, so it is not left open to everyone on your Wi-Fi."
+    : "This dashboard is locked. Enter its password.";
+  $("#loginpw").placeholder = setup ? "New password (at least 8 characters)" : "Password";
+  $("#loginpw").autocomplete = setup ? "new-password" : "current-password";
+  $("#loginbtn").textContent = setup ? "Set password" : "Sign in";
+  $("#loginhelp").hidden = !!setup; $("#loginmsg").textContent = "";
+  box.hidden = false; $("#loginpw").value = ""; $("#loginpw").focus();
 }
 async function post(path, body){
   try {
     const r = await fetch(path, {method:"POST", headers:{"Content-Type":"application/json"}, body:JSON.stringify(body)});
     const j = await r.json().catch(() => ({}));
-    if (r.status === 401 && path !== "/api/login") showLogin();
+    if (r.status === 401 && path !== "/api/login") showLogin(j.setup);
     return r.ok ? {ok:true, ...j} : {ok:false, error:j.error || "That did not work."};
   } catch (e) { return {ok:false, error:"Cannot reach netinv."}; }
 }
@@ -1243,7 +1256,6 @@ async function loadSettings(){
        el("div", {class:"form"}, field("Current password", cur), field("New password (at least 8 characters)", nw),
          el("div", {class:"row", style:"margin:0"},
            el("button", {class:"act", onclick:() => act("/api/password", {current:cur.value, new:nw.value}, "Password changed")}, "Change password"),
-           el("button", {class:"ghost", onclick:() => { if (confirm("Remove the password?\n\nAnyone on your Wi-Fi will be able to open this dashboard and block sites.")) act("/api/password", {current:cur.value, new:""}, "Password removed"); }}, "Remove password"),
            el("button", {class:"ghost", onclick:async () => { await post("/api/logout", {}); showLogin(); }}, "Sign out")))]
     : [el("p", {}, "Right now anyone on your Wi-Fi can open this page, see what every device does, and block sites. A password locks it."),
        el("div", {class:"form"}, field("New password (at least 8 characters)", nw),
@@ -1278,7 +1290,8 @@ async function loadSettings(){
 }
 $("#loginform").addEventListener("submit", async e => {
   e.preventDefault();
-  const r = await post("/api/login", {password:$("#loginpw").value});
+  const setup = $("#login").dataset.setup === "1", pw = $("#loginpw").value;
+  const r = await (setup ? post("/api/password", {new:pw}) : post("/api/login", {password:pw}));
   if (!r.ok) { $("#loginmsg").textContent = r.error; $("#loginpw").select(); return; }
   $("#loginmsg").textContent = ""; $("#login").hidden = true;
   refresh();

@@ -54,6 +54,7 @@ apt-get install -y -qq dnsmasq arp-scan dnsutils avahi-utils python3
 id netinv &>/dev/null || useradd --system --no-create-home --shell /usr/sbin/nologin netinv
 install -d -o netinv -g netinv -m 750 /var/lib/netinv
 install -d -o root -g netinv -m 750 /var/log/netinv
+chmod 600 /var/lib/netinv/*.db /var/lib/netinv/*.db-wal /var/lib/netinv/*.db-shm 2>/dev/null || true
 install -d /opt/netinv
 install -d -m 755 "$(dirname "$CONF")"
 (umask 077; printf '%s' "$GIVEN" > "$CONF")
@@ -135,6 +136,8 @@ RestartSec=5
 AmbientCapabilities=CAP_NET_RAW
 CapabilityBoundingSet=CAP_NET_RAW
 NoNewPrivileges=true
+# the database holds every device's activity and the Deco password: readable by netinv alone
+UMask=0077
 ProtectSystem=strict
 ReadWritePaths=/var/lib/netinv $BLOCK_DIR
 ProtectHome=true

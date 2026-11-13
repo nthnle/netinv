@@ -68,7 +68,7 @@ Then two changes on your router, so the Pi sees lookups:
 
 Devices pick up the new setting as they reconnect, which can take up to a day. Turning a device's Wi-Fi off and on speeds it up.
 
-After that, open the dashboard and go to **Settings** to set a password.
+The first time you open the dashboard it asks you to choose a password. Do that straight away: until then, whoever opens it first gets to choose.
 
 ### Installer options
 
@@ -118,7 +118,7 @@ In **Settings**, enter the address of your main Deco and the Deco owner password
 Before you do:
 
 - **It has to be the owner account**, and a Deco allows one owner session at a time. If you also use the Deco app as the owner, the app and netinv will keep signing each other out. The usual fix is to add a manager account in the Deco app (More > Managers) and use that in the app.
-- **The password is stored on the Pi** so netinv can sign in again on its own. netinv will not accept it until the dashboard has a password.
+- **The password is stored on the Pi** so netinv can sign in again on its own. It is kept as it is, not scrambled, because netinv has to send it to the Deco each time. Only the netinv service and root on the Pi can read the file. Because it is your TP-Link ID password, make it one you use nowhere else.
 - **Data-used figures are estimates**, worked out from the speeds the Deco reports every 30 seconds.
 - You can test the connection by hand first: `python3 deco.py http://<deco-address>`.
 
@@ -145,7 +145,7 @@ Be clear-eyed about what a DNS-based tool can and cannot do.
 
 ## Security and privacy
 
-- **Set the dashboard password.** Without one, anyone on your network can open the dashboard and block sites.
+- **The dashboard always has a password.** It asks you to choose one on first use, and shows nothing until you have. Five wrong tries lock out the device that made them, for longer each time.
 - **The dashboard is plain HTTP.** The password stops casual access on your own network. It does not protect against someone capturing traffic on that network. Do not expose the dashboard to the internet.
 - **Everything is stored on the Pi**, in `/var/lib/netinv`. Activity is kept as hourly counts per device and site for 30 days (`--retention-days`).
 - **What leaves your network**, and only this:
@@ -155,7 +155,7 @@ Be clear-eyed about what a DNS-based tool can and cannot do.
   - The public register of hardware makers, downloaded about once a month from the IEEE, so devices show who made them. Nothing about your devices is sent. Turn it off with `--oui-url ""`.
   - A speed test download from Cloudflare, when you press the button.
   - Alerts, to the address you configure, if you configure one.
-- **Forgot the dashboard password?** On the Pi: `sudo -u netinv python3 /opt/netinv/netinv.py --reset-password`. This also removes the stored Deco password.
+- **Forgot the dashboard password?** On the Pi: `sudo -u netinv python3 /opt/netinv/netinv.py --reset-password`, then open the dashboard and choose a new one. This also removes the stored Deco password.
 
 **Use it on your own network, and be straight with the people on it.** netinv shows which sites each device contacts. Tell the people you live with that it is running.
 

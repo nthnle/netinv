@@ -407,7 +407,8 @@ class App:
         self.parent = {}        # merged devices: second adapter -> the device it belongs to
         self.load_parents()
         self.presence = None    # mac -> online, as of the last sweep
-        self.fails = [0, 0]     # wrong dashboard passwords, locked-until
+        self.fails = {}         # wrong dashboard passwords: who tried -> [how many, locked until]
+        self.pw_lock = threading.Lock()
         self.speed = {}         # mac -> (down, up) bytes/s, from the Deco
         self.deco = None
         self.deco_state = {"ok": False, "msg": "", "ts": 0, "clients": 0, "nodes": []}
@@ -1097,7 +1098,7 @@ class App:
     def devices_csv(self):
         iso = lambda ts: time.strftime("%Y-%m-%d %H:%M", time.localtime(ts)) if ts else ""
         # names come off the network: stop a spreadsheet from running one as a formula
-        safe = lambda v: "'" + v if isinstance(v, str) and v and v[0] in "=+-@" else v
+        safe = lambda v: "'" + v if isinstance(v, str) and v and v[0] in "=+-@\t\r" else v
         out = io.StringIO()
         w = csv.writer(out)
         w.writerow(["name", "person", "name_in_deco_app", "announced_name", "hostname", "looks_like", "maker", "ip", "mac",
@@ -1479,25 +1480,31 @@ class App:
         salt, digest = stored.split(":")
         return hmac.compare_digest(self.pw_hash(str(password), bytes.fromhex(salt)), digest)
 
-    def login(self, password):
-        """Returns a session token, or raises with what to tell the person."""
-        now = time.time()
-        if self.fails[1] > now:
-            raise ValueError(f"Too many wrong tries. Wait {int(self.fails[1] - now) + 1} seconds.")
-        if not self.pw_check(password):
-            self.fails[0] += 1
-            if self.fails[0] >= 5:
-                self.fails = [0, now + 60]
-            raise ValueError("Wrong password.")
-        self.fails = [0, 0]
+    def login(self, password, who=""):
+        """Returns a session token, or raises with what to tell the person.
+        Wrong tries are counted per address, so a device guessing passwords locks itself out and nobody else.
+        After five, each further wrong try doubles the wait: a minute, two, four, up to an hour."""
+        # one check at a time: each costs real memory and processor time on purpose, and a burst of them would stall the Pi
+        with self.pw_lock:
+            now = time.time()
+            fails = self.fails.setdefault(who, [0, 0])
+            if fails[1] > now:
+                raise ValueError(f"Too many wrong tries. Wait {int(fails[1] - now) + 1} seconds.")
+            if not self.pw_check(password):
+                fails[0] += 1
+                if fails[0] >= 5:
+                    fails[1] = now + min(3600, 60 * 2 ** (fails[0] - 5))
+                if len(self.fails) > 500:  # forget those whose wait is over, so this cannot grow without end
+                    self.fails = {k: v for k, v in self.fails.items() if v[1] > now}
+                raise ValueError("Wrong password.")
+            self.fails.pop(who, None)
         token = secrets.token_urlsafe(32)
         self.x("INSERT INTO sessions VALUES(?,?)", (hashlib.sha256(token.encode()).hexdigest(), int(now) + SESSION_DAYS * 86400))
         return token
 
     def session_ok(self, token):
-        if not self.meta("pw_hash"):
-            return True
-        if not token:
+        # No password yet means nobody is signed in: the dashboard offers to choose one and nothing else.
+        if not token or not self.meta("pw_hash"):
             return False
         return bool(self.q("SELECT 1 FROM sessions WHERE token=? AND expires>?",
                            (hashlib.sha256(token.encode()).hexdigest(), int(time.time()))))
@@ -1506,12 +1513,6 @@ class App:
         new = str(body.get("new", ""))
         if self.meta("pw_hash") and not self.pw_check(body.get("current", "")):
             raise ValueError("The current password is not right.")
-        if not new:
-            if self.deco_config()[1]:
-                raise ValueError("Disconnect the Deco first: its password is only kept while the dashboard has one.")
-            self.x("DELETE FROM meta WHERE k='pw_hash'")
-            self.x("DELETE FROM sessions")
-            return {"ok": True, "removed": True}
         if len(new) < 8:
             raise ValueError("Use at least 8 characters.")
         salt = secrets.token_bytes(16)
@@ -1541,13 +1542,12 @@ class App:
             raise ValueError("Enter the Deco owner password.")
         if not re.fullmatch(r"(https?://)?[A-Za-z0-9.\-]+(:\d+)?/?", host):
             raise ValueError("That does not look like an address. Use something like 192.168.68.1")
-        try:
-            ip = ipaddress.ip_address(re.sub(r"^https?://|[:/].*$", "", host))
-            if not ip.is_private:
-                raise ValueError("The Deco address must be on your own network.")
-        except ValueError as e:
-            if "own network" in str(e):
-                raise
+        try:  # a name is looked up, so one that points outside the home is refused like an outside address
+            found = {ipaddress.ip_address(i[4][0]) for i in socket.getaddrinfo(re.sub(r"^https?://|[:/].*$", "", host), None)}
+        except (OSError, ValueError):
+            raise ValueError("Could not find that address. Use something like 192.168.68.1")
+        if not found or not all(ip.is_private for ip in found):
+            raise ValueError("The Deco address must be on your own network.")
         trial = deco.Deco(host, password)
         try:
             found = trial.clients()  # prove it works before saving anything
@@ -1586,6 +1586,7 @@ MANIFEST = {"name": "netinv", "short_name": "netinv", "start_url": "/", "display
 
 class Handler(BaseHTTPRequestHandler):
     server_version = "netinv"
+    timeout = 30  # a connection that goes quiet is dropped, not held open for ever
 
     def log_message(self, *a):
         pass
@@ -1618,8 +1619,11 @@ class Handler(BaseHTTPRequestHandler):
         self.send_header("Cache-Control", "no-store")
         self.send_header("X-Content-Type-Options", "nosniff")
         self.send_header("Content-Security-Policy", "default-src 'self' 'unsafe-inline'; frame-ancestors 'none'")
-        self.end_headers()
-        self.wfile.write(body)
+        try:
+            self.end_headers()
+            self.wfile.write(body)
+        except OSError:
+            pass  # the browser went away; nothing to tell it
 
     def do_GET(self):
         if not self.host_ok():
@@ -1634,11 +1638,11 @@ class Handler(BaseHTTPRequestHandler):
             return self.send(200, ICON.encode(), "image/svg+xml")
         if u.path == "/manifest.json":
             return self.send(200, MANIFEST, "application/manifest+json")
-        authed = app.session_ok(self.token())
+        authed, setup = app.session_ok(self.token()), not app.meta("pw_hash")
         if u.path == "/api/session":
-            return self.send(200, {"needs_password": bool(app.meta("pw_hash")), "signed_in": authed})
+            return self.send(200, {"needs_password": True, "setup": setup, "signed_in": authed})
         if not authed:
-            return self.send(401, {"error": "sign in"})
+            return self.send(401, {"error": "sign in", "setup": setup})
         if u.path == "/api/devices.csv":
             return self.send(200, app.devices_csv(), "text/csv; charset=utf-8", "netinv-devices.csv")
         fn = {"/api/summary": app.api_summary, "/api/devices": app.api_devices, "/api/device": app.api_device,
@@ -1659,16 +1663,24 @@ class Handler(BaseHTTPRequestHandler):
             return self.send(403, {"error": "forbidden"})
         app = self.server.app
         try:
-            body = json.loads(self.rfile.read(min(int(self.headers.get("Content-Length", 0)), 4096)))
+            # Nothing the dashboard sends is anywhere near this size. A length that is negative means
+            # "read until the sender stops", which would let anyone fill the Pi's memory before signing in.
+            size = int(self.headers.get("Content-Length", 0))
+            if not 0 <= size <= 4096:
+                raise ValueError
+            body = json.loads(self.rfile.read(size))
             if not isinstance(body, dict):
                 raise ValueError
-        except ValueError:
+        except (ValueError, OSError):
             return self.send(400, {"error": "bad request"})
         try:
             if self.path == "/api/login":
-                return self.send(200, {"ok": True}, token=app.login(str(body.get("password", ""))))
+                return self.send(200, {"ok": True}, token=app.login(str(body.get("password", "")), self.client_address[0]))
+            setup = not app.meta("pw_hash")
+            if setup and self.path == "/api/password":  # first use: choosing the password is the one thing allowed
+                return self.send(200, {"ok": True}, token=app.api_password(body).get("token", ""))
             if not app.session_ok(self.token()):
-                return self.send(401, {"error": "sign in"})
+                return self.send(401, {"error": "sign in", "setup": setup})
             if self.path == "/api/logout":
                 app.x("DELETE FROM sessions WHERE token=?", (hashlib.sha256(self.token().encode()).hexdigest(),))
                 return self.send(200, {"ok": True}, token="")

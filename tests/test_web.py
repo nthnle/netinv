@@ -1,0 +1,164 @@
+"""Tests of the web server as a browser, or something hostile on the network, meets it. Talks only to 127.0.0.1.
+
+    python3 -m unittest discover tests
+"""
+import argparse
+import http.client
+import json
+import os
+import socket
+import sys
+import tempfile
+import threading
+import time
+import unittest
+from http.server import ThreadingHTTPServer
+from unittest import mock
+
+sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), ".."))
+import netinv  # noqa: E402
+
+PASSWORD = "correct horse battery"
+real_lookup = socket.getaddrinfo
+
+
+class Web(unittest.TestCase):
+    def setUp(self):
+        self.dir = tempfile.TemporaryDirectory()
+        self.addCleanup(self.dir.cleanup)
+        self.app = netinv.App(argparse.Namespace(
+            db=os.path.join(self.dir.name, "t.db"), gateway="", retention_days=30, scan_interval=60,
+            block_file=os.path.join(self.dir.name, "blocked.conf"), block_hosts="", list_base="", notify_url="",
+            no_probe=True, log="", iface="", scan_cmd="", oui_url=""))
+        self.addCleanup(self.app.db.close)
+        self.srv = ThreadingHTTPServer(("127.0.0.1", 0), netinv.Handler)
+        self.srv.app, self.srv.allowed_hosts = self.app, {"localhost"}
+        self.port = self.srv.server_address[1]
+        threading.Thread(target=self.srv.serve_forever, daemon=True).start()
+        self.addCleanup(self.srv.server_close)
+        self.addCleanup(self.srv.shutdown)
+        self.cookie = ""
+
+    def call(self, method, path, body=None, headers=None):
+        c = http.client.HTTPConnection("127.0.0.1", self.port, timeout=10)
+        h = {"Cookie": self.cookie, **({"Content-Type": "application/json"} if body is not None else {}), **(headers or {})}
+        c.request(method, path, json.dumps(body) if body is not None else None, h)
+        r = c.getresponse()
+        text = r.read().decode()
+        if r.getheader("Set-Cookie"):
+            self.cookie = r.getheader("Set-Cookie").split(";")[0]
+        c.close()
+        try:
+            return r.status, json.loads(text)
+        except ValueError:
+            return r.status, text
+
+    def set_password(self):
+        self.assertEqual(self.call("POST", "/api/password", {"new": PASSWORD})[0], 200)
+
+
+class FirstUse(Web):
+    def test_nothing_is_shown_until_a_password_is_chosen(self):
+        self.assertEqual(self.call("GET", "/api/session")[1], {"needs_password": True, "setup": True, "signed_in": False})
+        for path in ("/api/devices", "/api/summary", "/api/devices.csv", "/api/settings"):
+            self.assertEqual(self.call("GET", path), (401, {"error": "sign in", "setup": True}), path)
+        self.assertEqual(self.call("POST", "/api/block", {"domain": "example.com"})[0], 401)
+        self.assertEqual(self.call("GET", "/")[0], 200)   # the page itself, which then asks for the password
+
+    def test_choosing_a_password_signs_you_in(self):
+        self.assertEqual(self.call("POST", "/api/password", {"new": "short"})[0], 400)
+        self.set_password()
+        self.assertEqual(self.call("GET", "/api/devices")[0], 200)
+        self.cookie = ""
+        self.assertEqual(self.call("GET", "/api/devices"), (401, {"error": "sign in", "setup": False}))
+
+    def test_once_set_it_cannot_be_replaced_or_removed_without_the_old_one(self):
+        self.set_password()
+        mine, self.cookie = self.cookie, ""
+        self.assertEqual(self.call("POST", "/api/password", {"new": "someone else's"})[0], 401)
+        self.cookie = mine
+        self.assertEqual(self.call("POST", "/api/password", {"current": "wrong", "new": "another one!"})[0], 400)
+        self.assertEqual(self.call("POST", "/api/password", {"current": PASSWORD, "new": ""})[0], 400)
+        self.assertEqual(self.call("POST", "/api/password", {"current": PASSWORD, "new": "another one!"})[0], 200)
+
+
+class SignIn(Web):
+    def setUp(self):
+        super().setUp()
+        self.set_password()
+        self.cookie = ""
+
+    def test_wrong_tries_lock_out_the_one_trying_and_no_one_else(self):
+        for _ in range(5):
+            self.assertEqual(self.call("POST", "/api/login", {"password": "guess"})[1]["error"], "Wrong password.")
+        self.assertIn("Too many wrong tries", self.call("POST", "/api/login", {"password": PASSWORD})[1]["error"])
+        self.assertTrue(self.app.login(PASSWORD, "192.168.68.20"))       # another device signs in as usual
+
+    def test_the_wait_grows_and_a_right_password_clears_it(self):
+        waits = []
+        for n in range(8):
+            with self.assertRaises(ValueError):
+                self.app.login("guess", "a")
+            waits.append(round(self.app.fails["a"][1] - time.time()) if self.app.fails["a"][1] else 0)
+            self.app.fails["a"][1] = min(self.app.fails["a"][1], 1)       # as if the wait had passed
+        self.assertEqual(waits, [0, 0, 0, 0, 60, 120, 240, 480])
+        self.app.login(PASSWORD, "a")
+        self.assertNotIn("a", self.app.fails)
+
+
+class Hostile(Web):
+    def raw(self, request, wait=5):
+        s = socket.create_connection(("127.0.0.1", self.port))
+        s.settimeout(wait)
+        self.addCleanup(s.close)
+        s.sendall(request)
+        try:
+            return s.recv(4096).decode("latin-1").split("\r\n")[0]
+        except socket.timeout:
+            return "no answer: the server is still reading"
+
+    def test_a_request_cannot_make_the_server_read_without_limit(self):
+        head = "POST /api/login HTTP/1.1\r\nHost: 127.0.0.1\r\nContent-Type: application/json\r\nContent-Length: %s\r\n\r\n"
+        for length in ("-1", "5000", "99999999999", "many"):
+            self.assertIn("400", self.raw((head % length).encode() + b"x" * 100), length)
+
+    def test_a_silent_connection_is_dropped(self):
+        self.assertIsNotNone(netinv.Handler.timeout)
+        old, netinv.Handler.timeout = netinv.Handler.timeout, 1
+        self.addCleanup(setattr, netinv.Handler, "timeout", old)
+        s = socket.create_connection(("127.0.0.1", self.port))
+        s.settimeout(6)
+        self.addCleanup(s.close)
+        self.assertEqual(s.recv(1), b"")   # closed by the server, not left open
+
+    def test_requests_a_web_page_elsewhere_could_make_are_refused(self):
+        self.assertEqual(self.call("GET", "/api/session", headers={"Host": "evil.example.com"})[0], 403)   # DNS rebinding
+        self.assertEqual(self.call("POST", "/api/login", {"password": "x"}, {"Content-Type": "text/plain"})[0], 403)   # a plain form
+
+    def test_a_blocked_name_cannot_smuggle_a_line_into_dnsmasq(self):
+        self.set_password()
+        self.call("POST", "/api/block", {"domain": "evil.com/\naddress=/bank.com/6.6.6.6"})
+        with open(self.app.a.block_file) as f:
+            self.assertEqual(f.read().splitlines()[1:], ["server=/evil.com/"])
+        self.assertEqual(self.call("POST", "/api/block", {"domain": "x\naddress=/bank.com/6.6.6.6"})[0], 400)
+
+    def test_the_deco_address_must_be_in_the_home_however_it_is_written(self):
+        self.set_password()
+        outside = [(socket.AF_INET, socket.SOCK_STREAM, 6, "", ("93.184.216.34", 0))]   # a name that points out of the house
+        with mock.patch("netinv.socket.getaddrinfo", lambda host, *a, **k: outside if host == "deco.example" else real_lookup(host, *a, **k)):
+            for host in ("8.8.8.8", "http://1.1.1.1", "deco.example"):
+                status, body = self.call("POST", "/api/settings/deco", {"host": host, "password": "x"})
+                self.assertEqual((status, body["error"]), (400, "The Deco address must be on your own network."), host)
+
+    def test_a_name_cannot_run_as_a_spreadsheet_formula(self):
+        for i, label in enumerate(("=HYPERLINK(1)", "+1", "-1", "@x", "\t=1", "\r=1")):
+            self.app.seen(f"a8:00:00:00:00:{i:02x}", f"10.0.0.{i + 2}", "", int(time.time()))
+            self.app.x("UPDATE devices SET label=? WHERE mac=?", (label, f"a8:00:00:00:00:{i:02x}"))
+        import csv, io
+        rows = list(csv.reader(io.StringIO(self.app.devices_csv().decode("utf-8-sig"))))[1:]
+        self.assertEqual(len(rows), 6)
+        self.assertTrue(all(r[0].startswith("'") for r in rows), [r[0] for r in rows])
+
+
+if __name__ == "__main__":
+    unittest.main()
