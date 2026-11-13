@@ -99,6 +99,7 @@ tbody tr.click:focus-visible{outline-offset:-2px}
 .map{display:grid;place-items:center;padding:4px 0 8px}
 .map svg{width:100%;height:auto;display:block}
 .map .link{stroke:var(--line);stroke-width:1.5}
+.map .link.trunk{stroke-width:2.5}
 .map .link.on{stroke:var(--accent);stroke-dasharray:3 6;animation:flow 1.6s linear infinite}
 .map .node{cursor:pointer;outline:none}
 .map .node circle{fill:var(--card);stroke:var(--line);stroke-width:1.5;transition:stroke .12s}
@@ -242,7 +243,7 @@ input[type=password]{flex:1 1 180px;max-width:360px}
     <div class="grid2">
       <div class="card">
         <div class="row">
-          <input type="search" id="devfilter" placeholder="Search devices" aria-label="Search devices by name, address or maker">
+          <input type="search" id="devfilter" placeholder="Search devices" aria-label="Search devices by name, address (IP or MAC, any format) or maker">
           <div class="chips" id="chips" role="group" aria-label="Show">
             <button data-f="all" aria-pressed="true">All<span class="n"></span></button>
             <button data-f="online" aria-pressed="false">Online<span class="n"></span></button>
@@ -500,39 +501,88 @@ function sparkTip(vals){
 }
 
 // ---- network map -----------------------------------------------------------
-// The router in the middle, every device around it: circle size and line brightness by how much it did.
+// With one access point: the router in the middle, every device around it. With a mesh: each unit gets its own
+// cluster of the devices connected through it, joined to the main unit, so the map shows roughly where things are.
+// Circle size and line brightness show how much a device did.
 function renderMap(list){
-  const hub = devices.find(d => d.infra === "router"), rest = list.filter(d => d !== hub)
-    .sort((a, b) => (b.online - a.online) || (b.queries - a.queries));
-  const rings = [];
-  for (let i = 0, k = 0; i < rest.length; k++) {
-    const r = 128 + k * 96, cap = Math.max(6, Math.floor(2 * Math.PI * r / 100));
-    rings.push({r, items: rest.slice(i, i + cap)}); i += cap;
+  const router = devices.find(d => d.infra === "router"), maxQ = Math.max(1, ...list.map(d => d.queries));
+  const mainName = (devices.find(d => d.unit && d.unit_main) || {}).unit || "", meshed = devices.some(d => d.unit && !d.unit_main);
+  const short = (t, n = 18) => t.length > n ? t.slice(0, n - 1).trimEnd() + "…" : t;
+  const glyph = k => { const g = svgEl("g", {class:"g", transform:"translate(-10 -10)"}); g.innerHTML = ICONS[k]; return g; };
+  const unitLabel = n => /deco/i.test(n) ? n : n + " Deco";
+  // sort devices into the unit they connect through
+  const centre = {name:mainName, hub:router, items:[]}, groups = new Map();
+  const group = name => groups.get(name) || groups.set(name, {name, hub:null, items:[]}).get(name);
+  for (const d of list) {
+    if (d === router) continue;
+    if (!meshed) centre.items.push(d);
+    else if (d.unit === mainName && mainName) {      // the main unit: the hub itself, or one more of its addresses
+      if (!centre.hub) centre.hub = d; else if (centre.hub.unit !== mainName) centre.items.push(d);
+    } else if (d.unit) { const g = group(d.unit); if (!g.hub) g.hub = d; }   // a unit's other addresses are the same box
+    else (d.node && d.node !== mainName ? group(d.node) : centre).items.push(d);
   }
-  const R = (rings.length ? rings[rings.length - 1].r : 128) + 74, maxQ = Math.max(1, ...rest.map(d => d.queries));
-  const short = t => t.length > 18 ? t.slice(0, 17).trimEnd() + "…" : t;
-  const glyph = d => { const g = svgEl("g", {class:"g", transform:"translate(-10 -10)"}); g.innerHTML = ICONS[kindOf(d)]; return g; };
-  const links = [], marks = [];
-  rings.forEach((ring, k) => ring.items.forEach((d, j) => {
-    const a = (-90 + 360 * j / ring.items.length + (k % 2 ? 180 / ring.items.length : 0)) * Math.PI / 180;
-    const x = Math.cos(a) * ring.r, y = Math.sin(a) * ring.r, w = Math.sqrt(d.queries / maxQ), rad = 17 + 8 * w;
-    links.push(svgEl("line", {class:"link" + (d.online && d.queries ? " on" : ""), x1:0, y1:0, x2:x.toFixed(1), y2:y.toFixed(1), "stroke-opacity": d.online ? (.3 + .7 * w).toFixed(2) : .5}));
-    const go = () => select(d.mac);
-    marks.push(svgEl("g", {class:"node" + (d.online ? " on" : "") + (d.known ? "" : " new") + (d.mac === selected ? " sel" : ""), transform:`translate(${x.toFixed(1)} ${y.toFixed(1)})`,
-        tabindex:0, role:"button", "data-mac":d.mac, "aria-label":`${devName(d)}, ${d.online ? "online" : "offline"}${d.mostly ? ", mostly " + d.mostly : ""}`,
-        onclick:go, onkeydown:e => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); go(); } }},
-      svgEl("title", {}, `${devName(d)}${d.known ? "" : " (new)"} · ${d.online ? "online" : "offline"}${d.mostly ? " · " + d.mostly : ""}`),
-      svgEl("circle", {r:rad.toFixed(1)}), glyph(d), svgEl("text", {y:(rad + 14).toFixed(1)}, short(devName(d)))));
-  }));
-  const hubGo = hub ? () => select(hub.mac) : null;
-  const center = svgEl("g", {class:"node hub" + (hub && hub.mac === selected ? " sel" : ""), tabindex: hub ? 0 : null, role: hub ? "button" : null, "aria-label": hub ? devName(hub) : null,
-      onclick:hubGo, onkeydown: hub ? e => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); hubGo(); } } : null},
-    svgEl("circle", {r:27}), (() => { const g = svgEl("g", {class:"g", transform:"translate(-10 -10)"}); g.innerHTML = ICONS.router; return g; })(),
-    svgEl("text", {y:42}, hub ? short(devName(hub)) : "Your network"));
+  const sats = [...groups.values()].sort((a, b) => a.name < b.name ? -1 : 1);
+  for (const g of sats) if (!g.hub) g.hub = devices.find(d => d.unit === g.name) || null;
+  const ringsOf = (items, r0, pitch, gap) => {
+    const out = [];
+    for (let i = 0, k = 0; i < items.length; k++) { const r = r0 + k * gap, cap = Math.max(6, Math.floor(2 * Math.PI * r / pitch)); out.push({r, items:items.slice(i, i + cap)}); i += cap; }
+    return out;
+  };
+  for (const g of [centre, ...sats]) {
+    g.items.sort((a, b) => (b.online - a.online) || (b.queries - a.queries));
+    g.rings = !meshed ? ringsOf(g.items, 128, 100, 96) : g.items.length > 14 ? ringsOf(g.items, 110, 84, 84)
+      : g.items.length ? [{r:Math.max(104, g.items.length * 84 / (2 * Math.PI)), items:g.items}] : [];
+    g.ext = (g.rings.length ? g.rings[g.rings.length - 1].r : 0) + (meshed ? 58 : 74);
+    g.x = g.y = 0; g.start = -Math.PI / 2;
+  }
+  if (sats.length) {  // satellites sit round the main unit, each given as much of the circle as its cluster needs
+    const big = Math.max(...sats.map(g => g.ext)), span = D => sats.map(g => 2 * Math.asin(Math.min(1, g.ext / D)));
+    let D = centre.ext + big + 8;
+    while (span(D).reduce((a, b) => a + b, 0) > 2 * Math.PI) D += 10;
+    const spans = span(D), slack = (2 * Math.PI - spans.reduce((a, b) => a + b, 0)) / sats.length;
+    let a = -Math.PI / 2 - spans[0] / 2;
+    sats.forEach((g, i) => {
+      const mid = a + spans[i] / 2; a += spans[i] + slack;
+      g.x = Math.cos(mid) * D; g.y = Math.sin(mid) * D;
+      g.start = mid + Math.PI + Math.PI / Math.max(1, g.rings.length ? g.rings[0].items.length : 1);  // leave the gap facing the main unit
+    });
+    // turn the main unit's own devices so that as few as possible sit on a line out to a satellite
+    const trunks = sats.map(g => Math.atan2(g.y, g.x)), turn = (a, t) => Math.abs(Math.atan2(Math.sin(a - t), Math.cos(a - t)));
+    const clear = s => Math.min(Infinity, ...centre.rings.flatMap((ring, k) => ring.items.map((_, j) =>
+      Math.min(...trunks.map(t => turn(s + 2 * Math.PI * j / ring.items.length + (k % 2 ? Math.PI / ring.items.length : 0), t))) * ring.r)));
+    let best = -1;
+    for (let i = 0; i < 90; i++) { const s = -Math.PI / 2 + i * Math.PI / 180, c = clear(s); if (c > best + .5) { best = c; centre.start = s; } }
+  }
+  const links = [], marks = [], hubs = [];
+  const mark = (d, x, y, rad, cls, kind, label, tip) => {
+    const go = d ? () => select(d.mac) : null;
+    return svgEl("g", {class:"node " + cls + (d && d.mac === selected ? " sel" : ""), transform:`translate(${x.toFixed(1)} ${y.toFixed(1)})`,
+        tabindex: d ? 0 : null, role: d ? "button" : null, "data-mac": d ? d.mac : null, "aria-label": d ? tip.replace(/ · /g, ", ") : null,
+        onclick:go, onkeydown: d ? e => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); go(); } } : null},
+      svgEl("title", {}, tip), svgEl("circle", {r:rad.toFixed(1)}), glyph(kind), svgEl("text", {y:(rad + 14).toFixed(1)}, label));
+  };
+  for (const g of [centre, ...sats]) {
+    g.rings.forEach((ring, k) => ring.items.forEach((d, j) => {
+      const n = ring.items.length, a = g.start + 2 * Math.PI * j / n + (k % 2 ? Math.PI / n : 0);
+      const x = g.x + Math.cos(a) * ring.r, y = g.y + Math.sin(a) * ring.r, w = Math.sqrt(d.queries / maxQ), rad = (meshed ? 15 : 17) + (meshed ? 7 : 8) * w;
+      links.push(svgEl("line", {class:"link" + (d.online && d.queries ? " on" : ""), x1:g.x.toFixed(1), y1:g.y.toFixed(1), x2:x.toFixed(1), y2:y.toFixed(1), "stroke-opacity": d.online ? (.3 + .7 * w).toFixed(2) : .5}));
+      marks.push(mark(d, x, y, rad, (d.online ? "on" : "") + (d.known ? "" : " new"), kindOf(d), short(devName(d), meshed ? 15 : 18),
+        `${devName(d)}${d.known ? "" : " (new)"} · ${d.online ? "online" : "offline"}${d.mostly ? " · " + d.mostly : ""}`));
+    }));
+    const main = g === centre, count = `${g.items.length} device${g.items.length === 1 ? "" : "s"}`;
+    const name = meshed && g.name ? unitLabel(g.name) : g.hub ? devName(g.hub) : "Your network";
+    if (!main) links.unshift(svgEl("line", {class:"link trunk" + (!g.hub || g.hub.online ? " on" : ""), x1:0, y1:0, x2:g.x.toFixed(1), y2:g.y.toFixed(1)}));
+    hubs.push(mark(g.hub, g.x, g.y, main ? 27 : 22, "hub", "router", meshed ? `${short(name, 20)} · ${g.items.length}` : short(name),
+      meshed ? `${name} · ${count} connected through it${g.hub && !g.hub.online ? " · offline" : ""}` : name));
+  }
+  const all = [centre, ...sats], x0 = Math.min(...all.map(g => g.x - g.ext)), x1 = Math.max(...all.map(g => g.x + g.ext)),
+    y0 = Math.min(...all.map(g => g.y - g.ext)), y1 = Math.max(...all.map(g => g.y + g.ext));
   const focused = document.activeElement && document.activeElement.dataset ? document.activeElement.dataset.mac : null;
+  const hint = !list.length ? "No devices match."
+    : (meshed ? "Each cluster is a Deco unit and the devices connected through it, usually the nearest one. " : "") + "Bigger circles and brighter lines mean more activity. Orange rings are new devices. Click one to open it.";
   fill($("#map"),
-    svgEl("svg", {viewBox:`${-R} ${-R} ${2*R} ${2*R}`, style:`max-width:${Math.round(2*R*1.35)}px`, role:"group", "aria-label":"Map of devices on your network"}, links, marks, center),
-    el("p", {class:"maphint"}, rest.length ? "Bigger circles and brighter lines mean more activity. Orange rings are new devices. Click one to open it." : "No devices match."));
+    svgEl("svg", {viewBox:`${x0.toFixed(0)} ${y0.toFixed(0)} ${(x1 - x0).toFixed(0)} ${(y1 - y0).toFixed(0)}`, style:`max-width:${Math.round((x1 - x0) * 1.35)}px`, role:"group", "aria-label":"Map of devices on your network"}, links, marks, hubs),
+    el("p", {class:"maphint"}, hint));
   if (focused) { const n = $("#map").querySelector(`[data-mac="${CSS.escape(focused)}"]`); if (n) n.focus(); }
 }
 
@@ -754,8 +804,8 @@ function attnRow(it){
     btns = [el("button", {class:"act", onclick:() => openDevice(d.mac, true)}, "Name it"),
             el("button", {class:"ghost", title:"Mark it as reviewed without naming it", onclick:() => update(d.mac, {known:true}, "Marked as reviewed")}, "It's fine")];
   } else if (it.kind === "silent") {
-    title = `${n} is online but netinv sees nothing from it`;
-    text = "It is probably using its own DNS or a VPN, so what it does is invisible here.";
+    title = `${n} is online but has not looked anything up in a week`;
+    text = "Appliances can go days between lookups, but a week of silence usually means it uses its own DNS (some TVs and streaming sticks have one built in) or a VPN. What it does is invisible here.";
     btns = [view, ignore];
   } else if (it.kind === "hidden") {
     const relay = it.services.includes("iCloud Private Relay") && !blockedBy("mask.icloud.com");
@@ -807,6 +857,13 @@ async function reviewAll(list){
 }
 
 // ---- device list -----------------------------------------------------------
+// A hardware address typed in any common form (AA-BB-CC-DD-EE-FF, aabb.ccdd.eeff, aabbccddeeff, or part of one)
+// comes back as bare hex to compare with the stored aa:bb:cc:dd:ee:ff form. Anything else, including an IP address, gives null.
+function macQuery(f){
+  const h = f.replace(/[\s:.\-]/g, "");
+  if (!/^[0-9a-f]{4,12}$/.test(h) || /^\d{1,3}(\.\d{1,3}){0,3}\.?$/.test(f)) return null;
+  return h !== f || /\d/.test(h) || h.length >= 6 ? h : null;  // a short plain word such as "cafe" is a name, not an address
+}
 const FILTERS = {all:() => true, online:d => d.online, new:d => !d.known, silent:isSilent};
 const SORTS = {
   name:[d => devName(d).toLowerCase(), 1], mostly:[d => (d.mostly || "￿").toLowerCase(), 1],
@@ -826,7 +883,9 @@ function renderDevices(){
   for (const th of document.querySelectorAll("th[data-sort]")) {
     if (th.dataset.sort === sort.key) th.setAttribute("aria-sort", sort.dir > 0 ? "ascending" : "descending"); else th.removeAttribute("aria-sort");
   }
-  let list = devices.filter(FILTERS[filter]).filter(d => !f || [d.label,d.deco_name,d.mdns,d.owner,d.hostname,d.hint,d.vendor,d.mac,d.ip,d.mostly,connName(d.conn),nodeName(d)].join(" ").toLowerCase().includes(f));
+  const mq = macQuery(f), macs = d => [d.mac, ...(d.also || []).map(a => a.mac)];
+  let list = devices.filter(FILTERS[filter]).filter(d => !f || [d.label,d.deco_name,d.mdns,d.owner,d.hostname,d.hint,d.vendor,...macs(d),d.ip,d.mostly,connName(d.conn),nodeName(d)].join(" ").toLowerCase().includes(f)
+    || mq && macs(d).some(m => m.replace(/:/g, "").includes(mq)));
   if (sort.key) {
     const get = SORTS[sort.key][0];
     list = list.slice().sort((a, b) => { const x = get(a), y = get(b); return (x < y ? -1 : x > y ? 1 : 0) * sort.dir; });
@@ -976,7 +1035,8 @@ async function renderDetail(refresh){
   const ports = data.ports;
   fill($("#dact"),
     el("p", {class:"say"}, d.infra && !data.activity.length ? "This is part of the network itself (your router, a mesh unit, or the Pi running netinv). It does not ask netinv for addresses, so nothing shows here. That is normal."
-      : isSilent(d) && range === 24 ? "It is online, but netinv sees nothing from it. It may be using its own DNS or a VPN." : sentence(data.activity)),
+      : isSilent(d) && range === 24 ? (d.last_lookup ? `Nothing in the last 24 hours. It last looked something up ${ago(d.last_lookup)}. Appliances often go days between lookups, so that is normal.`
+        : "It is online, but netinv has seen nothing from it for a week. It may be using its own DNS or a VPN.") : sentence(data.activity)),
     u.down || u.up || d.down || d.up ? el("div", {class:"kv", title:"Worked out from the speeds your Deco reports every half minute, so treat it as a rough figure"},
       el("span", {}, "Data in this period: about ", el("b", {}, "↓ " + fmtBytes(u.down)), " down, ", el("b", {}, "↑ " + fmtBytes(u.up)), " up"),
       d.down || d.up ? el("span", {class:"rate"}, `Right now ↓ ${fmtRate(d.down)}  ↑ ${fmtRate(d.up)}`) : null) : null,

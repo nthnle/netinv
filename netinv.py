@@ -171,6 +171,7 @@ QUERY_RE = re.compile(
 # A name we are willing to write into dnsmasq's config: plain hostname labels, at least two of them.
 DOMAIN_RE = re.compile(r"(?=.{4,253}$)(?:[a-z0-9_](?:[a-z0-9_-]{0,61}[a-z0-9_])?\.)+[a-z][a-z0-9-]{1,62}")
 PI_VENDOR = "this Pi (netinv)"
+SILENT_DAYS = 7  # an online device with no lookups for this long is flagged as bypassing netinv
 SECOND_LEVEL = {"co", "com", "net", "org", "gov", "ac", "edu", "or", "ne", "go"}
 
 # Lookups that give away what a device is, for devices that report no name.
@@ -882,11 +883,14 @@ class App:
 
     def api_devices(self, p):
         now = int(time.time())
-        day, cutoff = now - 86400, self.online_cutoff()
+        day, week, cutoff = now - 86400, now - SILENT_DAYS * 86400, self.online_cutoff()
         rows = self.q("SELECT *, last_seen>=? online FROM devices ORDER BY known, online DESC, last_seen DESC", (cutoff,))
-        counts = collections.Counter()
-        for r in self.q("SELECT dev, SUM(count) c FROM dns_hourly WHERE hour>=? GROUP BY dev", (day,)):
-            counts[self.root(r["dev"])] += r["c"]
+        counts, last = collections.Counter(), collections.Counter()
+        for r in self.q("""SELECT dev, MAX(hour) m, SUM(CASE WHEN hour>=? THEN count ELSE 0 END) c
+                           FROM dns_hourly WHERE hour>=? GROUP BY dev""", (day, week)):
+            root = self.root(r["dev"])
+            counts[root] += r["c"]
+            last[root] = max(last[root], r["m"])
         used = collections.defaultdict(lambda: [0, 0])
         for r in self.q("SELECT mac, SUM(down) d, SUM(up) u FROM usage_hourly WHERE hour>=? GROUP BY mac", (day,)):
             used[self.root(r["mac"])][0] += r["d"]
@@ -921,12 +925,17 @@ class App:
             mac = r["mac"]
             r.pop("host_checked", None)
             r["queries"] = counts.get(mac, 0)
+            r["last_lookup"] = last.get(mac, 0)  # 0: nothing in the last SILENT_DAYS days
             r["spark"] = sparks.get(mac) or [0] * 24
             cats = doing.get(mac, [])
             r["hint"] = service_hint(r.get("services") or "") or hints.get(mac, "")
             # the router, the mesh units and this Pi do not ask netinv for addresses, so silence from them is normal
             r["infra"] = ("router" if self.a.gateway and r["ip"] == self.a.gateway else "pi" if r["vendor"] == PI_VENDOR
                           else "mesh" if is_mesh(r) else "")
+            # which mesh unit this row is, so the map can draw each unit with its own devices around it
+            unit = r["infra"] and next((n for n in nodes if n.get("ip") and n["ip"] == r["ip"]
+                                        or len(n.get("mac") or "") == 17 and n["mac"][:14] == mac[:14]), None)
+            r["unit"], r["unit_main"] = (unit["name"][:60], int(bool(unit.get("main")))) if unit else ("", 0)
             r["mostly"] = mostly(cats)
             r["hidden"] = int(any(c["cat"] == HIDDEN for c in cats))
             fam = self.family(mac)
@@ -1031,7 +1040,9 @@ class App:
             cats = {c["cat"]: c for c in doing.get(mac, [])}
             total = sum(c["c"] for c in cats.values())
             found = []
-            if d["online"] and not d["queries"] and not d["infra"] and now - d["first_seen"] > 3600:
+            # Appliances look up their server once and then hold the connection for days, so a quiet
+            # day means nothing. A quiet week from something that is online is worth a look.
+            if d["online"] and not d["last_lookup"] and not d["infra"] and now - d["first_seen"] > SILENT_DAYS * 86400:
                 found.append({"kind": "silent"})
             if HIDDEN in cats:
                 found.append({"kind": "hidden", "services": cats[HIDDEN]["services"]})
