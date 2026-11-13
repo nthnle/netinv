@@ -3,14 +3,14 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>netinv</title>
+<title>lanledger</title>
 <link rel="manifest" href="/manifest.json">
 <link rel="icon" href="/icon.svg" type="image/svg+xml">
 <link rel="apple-touch-icon" href="/icon.svg">
 <meta name="theme-color" content="#090c13">
 <meta name="apple-mobile-web-app-capable" content="yes">
-<meta name="apple-mobile-web-app-title" content="netinv">
-<script>try{if(localStorage.getItem("netinv-theme")==="light")document.documentElement.dataset.theme="light"}catch(e){}</script>
+<meta name="apple-mobile-web-app-title" content="lanledger">
+<script>try{if(localStorage.getItem("lanledger-theme")==="light")document.documentElement.dataset.theme="light"}catch(e){}</script>
 <style>
 :root{color-scheme:dark;--bg:#090c13;--card:#111725;--ink:#e8ecf3;--mute:#8d99ab;--line:#222b3c;--accent:#4cc9f0;--accent2:#8b7cf6;--soft:#4cc9f01f;--ok:#34d399;--warn:#fbbf24;--warnbg:#fbbf2414;--bad:#f87171;--bar:#4cc9f0;--on-accent:#06121a;--lift:0 0 0 1px #4cc9f012,0 18px 40px -24px #000}
 :root[data-theme=light]{color-scheme:light;--bg:#f2f4f8;--card:#fff;--ink:#141a24;--mute:#566275;--line:#dde3ec;--accent:#0b74c4;--accent2:#6d4fd8;--soft:#0b74c41a;--ok:#15803d;--warn:#b45309;--warnbg:#b453091a;--bad:#b91c1c;--bar:#0b74c4;--on-accent:#fff;--lift:0 1px 2px #1118270d,0 14px 30px -22px #11182740}
@@ -230,7 +230,7 @@ input[type=password]{flex:1 1 180px;max-width:360px}
 </head>
 <body>
 <header><div class="bar">
-  <div class="brand"><svg viewBox="0 0 26 26" aria-hidden="true"><defs><linearGradient id="lg" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#4cc9f0"/><stop offset="1" stop-color="#8b7cf6"/></linearGradient></defs><g fill="none" stroke="url(#lg)" stroke-width="1.8" stroke-linecap="round"><path d="M13 13 5 6M13 13l9-5M13 13l-7 8M13 13l8 7"/></g><g fill="url(#lg)"><circle cx="13" cy="13" r="3.4"/><circle cx="5" cy="6" r="2.2"/><circle cx="22" cy="8" r="2.2"/><circle cx="6" cy="21" r="2.2"/><circle cx="21" cy="20" r="2.2"/></g></svg><h1>netinv</h1></div>
+  <div class="brand"><svg viewBox="0 0 26 26" aria-hidden="true"><defs><linearGradient id="lg" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#4cc9f0"/><stop offset="1" stop-color="#8b7cf6"/></linearGradient></defs><g fill="none" stroke="url(#lg)" stroke-width="1.8" stroke-linecap="round"><path d="M13 13 5 6M13 13l9-5M13 13l-7 8M13 13l8 7"/></g><g fill="url(#lg)"><circle cx="13" cy="13" r="3.4"/><circle cx="5" cy="6" r="2.2"/><circle cx="22" cy="8" r="2.2"/><circle cx="6" cy="21" r="2.2"/><circle cx="21" cy="20" r="2.2"/></g></svg><h1>lanledger</h1></div>
   <nav role="tablist" aria-label="Views">
     <button role="tab" id="t-devices" data-tab="devices" aria-controls="tab-devices" aria-selected="true">Devices<span class="n" id="navn" hidden></span></button>
     <button role="tab" id="t-activity" data-tab="activity" aria-controls="tab-activity" aria-selected="false" tabindex="-1">Activity</button>
@@ -253,7 +253,7 @@ input[type=password]{flex:1 1 180px;max-width:360px}
             <button data-f="all" aria-pressed="true">All<span class="n"></span></button>
             <button data-f="online" aria-pressed="false">Online<span class="n"></span></button>
             <button data-f="new" aria-pressed="false" title="Devices you have not named or reviewed yet">New<span class="n"></span></button>
-            <button data-f="silent" aria-pressed="false" title="Online, but netinv saw no activity from them in the last 24 hours">No activity<span class="n"></span></button>
+            <button data-f="silent" aria-pressed="false" title="Online, but lanledger saw no activity from them in the last 24 hours">No activity<span class="n"></span></button>
           </div>
           <span class="seg spacer" id="viewseg" role="group" aria-label="View"><button data-view="list" aria-pressed="true">List</button><button data-view="map" aria-pressed="false">Map</button></span>
         </div>
@@ -302,14 +302,14 @@ input[type=password]{flex:1 1 180px;max-width:360px}
     <div class="card">
       <h2>Blocked sites</h2>
       <p class="mute">A blocked site stops working on every device that uses this network normally. Devices on a VPN or their own private DNS are not affected.</p>
-      <div class="note" id="blockoff" hidden>Blocking is not switched on yet. On the Pi, get the latest netinv and run <span class="mono">sudo ./install.sh</span> once.</div>
+      <div class="note" id="blockoff" hidden>Blocking is not switched on yet. On the Pi, get the latest lanledger and run <span class="mono">sudo ./install.sh</span> once.</div>
       <form class="row" id="blockform"><input type="text" id="blockq" placeholder="Site to block, e.g. tiktok.com" aria-label="Site to block"><button class="act">Block site</button></form>
       <div id="blockrows"></div>
     </div>
     <div class="card">
       <h2>Ready-made block lists</h2>
       <p class="mute">Switch on a list to block thousands of known sites in one go. Lists update themselves every day. If a list blocks something you need, press Allow next to it.</p>
-      <div class="note" id="listsoff" hidden>Block lists are not switched on yet. On the Pi, get the latest netinv and run <span class="mono">sudo ./install.sh</span> once.</div>
+      <div class="note" id="listsoff" hidden>Block lists are not switched on yet. On the Pi, get the latest lanledger and run <span class="mono">sudo ./install.sh</span> once.</div>
       <div id="lists"></div>
       <div id="allowed"></div>
     </div>
@@ -337,28 +337,28 @@ input[type=password]{flex:1 1 180px;max-width:360px}
     <div class="card"><h2>Dashboard password</h2><div id="set-pw"></div></div>
     <div class="card"><h2>TP-Link Deco</h2><div id="set-deco"></div></div>
     <div class="card"><h2>Alerts on your phone</h2><div id="set-notify"></div></div>
-    <div class="card"><h2>Use it like an app</h2><p class="mute" style="margin:0">On a phone, open this page and choose “Add to Home Screen” from the browser's share or menu button. netinv then opens full-screen from its own icon.</p></div>
+    <div class="card"><h2>Use it like an app</h2><p class="mute" style="margin:0">On a phone, open this page and choose “Add to Home Screen” from the browser's share or menu button. lanledger then opens full-screen from its own icon.</p></div>
   </section>
 
   <details class="help card" style="margin-top:12px">
     <summary>How to read this page</summary>
     <ul>
-      <li>Before a device can reach a site it asks for the site's address. That question is a <b>lookup</b>. netinv counts lookups, so it knows which sites a device contacted and roughly how often. It cannot see pages, messages, or how much data moved.</li>
+      <li>Before a device can reach a site it asks for the site's address. That question is a <b>lookup</b>. lanledger counts lookups, so it knows which sites a device contacted and roughly how often. It cannot see pages, messages, or how much data moved.</li>
       <li>A device name marked <b>guess</b> was worked out from what the device looks up. Give the device a name to replace the guess.</li>
-      <li>Devices using a VPN, iCloud Private Relay or their own private DNS show little or nothing here. netinv flags them when it can tell.</li>
+      <li>Devices using a VPN, iCloud Private Relay or their own private DNS show little or nothing here. lanledger flags them when it can tell.</li>
       <li>With more than one Deco unit, each device shows which unit it connects through. That is usually the nearest one, so it hints at where the device is. Type a unit's name in the search box to see everything on it.</li>
-      <li>With a Deco connected (Settings), devices take the names from the Deco app, and netinv estimates how much data each one moved from the speeds the Deco reports.</li>
+      <li>With a Deco connected (Settings), devices take the names from the Deco app, and lanledger estimates how much data each one moved from the speeds the Deco reports.</li>
       <li><b>Blocking</b> a site makes its lookups fail for the whole network. It can take a few minutes to kick in, and it cannot block a single device.</li>
     </ul>
   </details>
 </main>
 <div id="login" hidden>
   <form class="card" id="loginform">
-    <h2>netinv</h2>
+    <h2>lanledger</h2>
     <p class="mute" id="loginsay">This dashboard is locked. Enter its password.</p>
     <div class="row"><input type="password" id="loginpw" autocomplete="current-password" placeholder="Password" aria-label="Dashboard password"><button class="act" id="loginbtn">Sign in</button></div>
     <p id="loginmsg" role="alert"></p>
-    <details id="loginhelp"><summary>Forgot the password?</summary><p class="mute" style="margin-top:8px">On the Pi, run this, then reload this page and choose a new one:</p><p class="mono">sudo -u netinv python3 /opt/netinv/netinv.py --reset-password</p></details>
+    <details id="loginhelp"><summary>Forgot the password?</summary><p class="mute" style="margin-top:8px">On the Pi, run this, then reload this page and choose a new one:</p><p class="mono">sudo -u lanledger python3 /opt/lanledger/lanledger.py --reset-password</p></details>
   </form>
 </div>
 <div id="toast" role="status" aria-live="polite"></div>
@@ -402,7 +402,7 @@ async function post(path, body){
     const j = await r.json().catch(() => ({}));
     if (r.status === 401 && path !== "/api/login") showLogin(j.setup);
     return r.ok ? {ok:true, ...j} : {ok:false, error:j.error || "That did not work."};
-  } catch (e) { return {ok:false, error:"Cannot reach netinv."}; }
+  } catch (e) { return {ok:false, error:"Cannot reach lanledger."}; }
 }
 const fmt = n => Number(n).toLocaleString();
 function ago(ts){
@@ -694,20 +694,20 @@ function activityList(acts){
   const fg = acts.filter(a => !a.background), bg = acts.filter(a => a.background);
   return el("div", {class:"acts"},
     fg.length ? fg.map(row) : null,
-    bg.length ? [el("h4", {style: fg.length ? "margin-top:10px" : null, title:"Things devices do on their own (updates, sync, ads), plus sites netinv does not recognise"}, "Background and unrecognised"), bg.map(row)] : null);
+    bg.length ? [el("h4", {style: fg.length ? "margin-top:10px" : null, title:"Things devices do on their own (updates, sync, ads), plus sites lanledger does not recognise"}, "Background and unrecognised"), bg.map(row)] : null);
 }
 // One sentence a person can read without knowing what a lookup is.
 function sentence(acts){
   if (!acts.length) return "Nothing seen from this device in this period.";
   const fg = acts.filter(a => !a.background).slice(0, 2);
-  if (!fg.length) return acts[0].cat === "Other" ? "Only sites netinv does not recognise. The list below is the best clue." : "Only background chatter (updates, sync, ads). Nobody seems to be using it.";
+  if (!fg.length) return acts[0].cat === "Other" ? "Only sites lanledger does not recognise. The list below is the best clue." : "Only background chatter (updates, sync, ads). Nobody seems to be using it.";
   return "Mostly " + fg.map(a => lowerFirst(catName(a.cat)) + (a.services.length ? ` (${a.services.slice(0, 3).join(", ")})` : "")).join(" and ") + ".";
 }
 
 let devices = [], byMac = new Map(), selected = null, range = 24, group = "base", tab = "devices";
 let filter = "all", sort = {key:null, dir:1}, liveRows = [], livePaused = false, labelInput = null;
 let view = "list";
-try { if (localStorage.getItem("netinv-view") === "map") view = "map"; } catch (e) {}
+try { if (localStorage.getItem("lanledger-view") === "map") view = "map"; } catch (e) {}
 let ownerInput = null, histOpen = false, portsBusy = false, speedBusy = false, schedEdit = null, liveOnlyBlocked = false, hasDeco = false;
 let blocked = new Set(), canBlock = false, attention = [], attnSeen = "", attnAll = false, techOpen = false;
 
@@ -721,7 +721,7 @@ const UNDO = "It can take a few minutes to take effect. You can undo it on the B
 async function setBlock(target, on, question){
   const list = [].concat(target), label = list[0].service || list[0];
   if (on && !confirm(question || (list[0].service
-      ? `Block ${label} for every device on your network?\n\nThis blocks every address netinv knows ${label} uses. ${UNDO}`
+      ? `Block ${label} for every device on your network?\n\nThis blocks every address lanledger knows ${label} uses. ${UNDO}`
       : `Block ${label} for every device on your network?\n\nEverything under it (like www.${label}) is blocked too. ${UNDO}`))) return false;
   for (const t of list) {
     const r = await post("/api/block", t.service ? {service:t.service, on} : {domain:t, on});
@@ -875,7 +875,7 @@ function attnRow(it){
   const ignore = el("button", {class:"ghost", title:"Do not show this again", onclick:() => dismiss(it.key)}, "Ignore");
   let title, text, btns;
   if (it.kind === "new") {
-    title = isUnnamed(d) ? (isGuess(d) ? `New device, probably: ${n}` : "New device netinv cannot identify") : `New device: ${n}`;
+    title = isUnnamed(d) ? (isGuess(d) ? `New device, probably: ${n}` : "New device lanledger cannot identify") : `New device: ${n}`;
     text = `First seen ${ago(d.first_seen)}${where}.` + (d.vendor ? ` Made by ${d.vendor}.` : "") + (d.node ? ` Connected through the ${nodeName(d)}.` : "") + " Is it yours?";
     btns = [el("button", {class:"act", onclick:() => openDevice(d.mac, true)}, "Name it"),
             el("button", {class:"ghost", title:"Mark it as reviewed without naming it", onclick:() => update(d.mac, {known:true}, "Marked as reviewed")}, "It's fine")];
@@ -888,7 +888,7 @@ function attnRow(it){
     title = `${n} hides part of what it does`;
     text = `It uses ${it.services.join(", ")}.` + (relay && canBlock ? " You can turn Private Relay off for this network; Apple devices then fall back to normal lookups." : "");
     btns = [relay && canBlock ? el("button", {class:"act", onclick:async () => { if (await setBlock(["mask.icloud.com", "mask-h2.icloud.com"], true,
-      "Turn off iCloud Private Relay on this network?\n\nApple devices will show a notice that Private Relay is unavailable here, and their activity becomes visible in netinv. This applies to every Apple device on the network.")) dismiss(it.key); }}, "Turn off Private Relay") : null, view, ignore];
+      "Turn off iCloud Private Relay on this network?\n\nApple devices will show a notice that Private Relay is unavailable here, and their activity becomes visible in lanledger. This applies to every Apple device on the network.")) dismiss(it.key); }}, "Turn off Private Relay") : null, view, ignore];
   } else if (it.kind === "guest") {
     title = `${n} is on your guest Wi-Fi`;
     text = "Reported by the Deco. Fine if you have visitors; worth a look if you do not.";
@@ -1008,7 +1008,7 @@ async function update(mac, patch, msg){
   toast(msg);
 }
 async function forget(d){
-  if (!confirm(`Forget ${devName(d)}?\n\nThis removes it and its history from netinv. It does not disconnect it: if it is still on your network it will show up again as a new device.`)) return;
+  if (!confirm(`Forget ${devName(d)}?\n\nThis removes it and its history from lanledger. It does not disconnect it: if it is still on your network it will show up again as a new device.`)) return;
   const r = await post("/api/forget", {mac:d.mac});
   if (!r.ok) { toast(r.error); return; }
   deselect(); attnSeen = ""; await refresh(); toast("Device forgotten");
@@ -1067,7 +1067,7 @@ function detailHead(d){
         el("div", {class:"dstate"}, [d.online ? "Online now" : "Offline, last seen " + ago(d.last_seen), d.owner, connName(d.conn_live || d.conn), nodeName(d), d.isolated ? "isolated" : "",
           d.net === "guest" ? "guest Wi-Fi" : "", isGuess(d) ? "name is a guess" : ""].filter(Boolean).join(" · "))),
       el("button", {class:"x", "aria-label":"Close device details", title:"Close", onclick:deselect}, "×")),
-    !real ? el("p", {class:"mute", style:"margin-top:12px"}, "netinv saw lookups from this address but never matched it to a device, so it cannot be named.") : null,
+    !real ? el("p", {class:"mute", style:"margin-top:12px"}, "lanledger saw lookups from this address but never matched it to a device, so it cannot be named.") : null,
     real && unnamed ? el("div", {class:"ask"}, el("h3", {}, "What is this device?"),
       el("p", {}, d.hint ? `It did not give a name. From what it does, it looks like: ${d.hint}. ` : "It did not give a name, and what it does is not enough to guess. ",
         d.randomized ? "To be sure, open Wi-Fi settings on the device you suspect and compare its Wi-Fi address with the hardware address under Technical details. "
@@ -1081,7 +1081,7 @@ function detailHead(d){
     el("div", {class:"row", style:"margin:10px 0 0"},
       real ? el("button", {class:"ghost", onclick:() => update(d.mac, {known: !d.known}, d.known ? "Marked as new again" : "Marked as reviewed")}, d.known ? "Mark as new again" : "Mark as reviewed") : null,
       todo.length ? el("button", {class:"ghost", title:"Open the next device you have not reviewed", onclick:() => select(todo[0].mac, false)}, `Next new device (${todo.length}) →`) : null,
-      el("button", {class:"link danger spacer", title:"Remove this device and its history from netinv", onclick:() => forget(d)}, "Forget device")),
+      el("button", {class:"link danger spacer", title:"Remove this device and its history from lanledger", onclick:() => forget(d)}, "Forget device")),
     tech,
   ];
 }
@@ -1110,10 +1110,10 @@ async function renderDetail(refresh){
   const max = Math.max(1, ...data.top.map(r => r.c)), u = data.usage, real = isReal(d);
   const ports = data.ports;
   fill($("#dact"),
-    el("p", {class:"say"}, d.infra && !data.activity.length ? "This is part of the network itself (your router, a mesh unit, or the Pi running netinv). It does not ask netinv for addresses, so nothing shows here. That is normal."
-      : d.isolated && !data.activity.length ? "Your Deco reports it online, but it does not answer the Pi. That is what Device Isolation in the Deco app does. Its lookups cannot reach netinv either, so nothing shows here and blocks do not apply to it."
+    el("p", {class:"say"}, d.infra && !data.activity.length ? "This is part of the network itself (your router, a mesh unit, or the Pi running lanledger). It does not ask lanledger for addresses, so nothing shows here. That is normal."
+      : d.isolated && !data.activity.length ? "Your Deco reports it online, but it does not answer the Pi. That is what Device Isolation in the Deco app does. Its lookups cannot reach lanledger either, so nothing shows here and blocks do not apply to it."
       : isSilent(d) && range === 24 ? (d.last_lookup ? `Nothing in the last 24 hours. It last looked something up ${ago(d.last_lookup)}. Appliances often go days between lookups, so that is normal.`
-        : "It is online, but netinv has seen nothing from it for a week. It may be using its own DNS or a VPN.") : sentence(data.activity)),
+        : "It is online, but lanledger has seen nothing from it for a week. It may be using its own DNS or a VPN.") : sentence(data.activity)),
     u.down || u.up || d.down || d.up ? el("div", {class:"kv", title:"Worked out from the speeds your Deco reports every half minute, so treat it as a rough figure"},
       el("span", {}, "Data in this period: about ", el("b", {}, "↓ " + fmtBytes(u.down)), " down, ", el("b", {}, "↑ " + fmtBytes(u.up)), " up"),
       d.down || d.up ? el("span", {class:"rate"}, `Right now ↓ ${fmtRate(d.down)}  ↑ ${fmtRate(d.up)}`) : null) : null,
@@ -1179,7 +1179,7 @@ function renderLive(){
     rows.slice(0, 300).map(r => el("tr", {}, el("td", {class:"mono", style:"white-space:nowrap"}, new Date(r.ts*1000).toLocaleTimeString()),
       el("td", {}, byMac.has(r.dev) ? el("button", {class:"link", title:"Show this device", onclick:() => openDevice(r.dev)}, r.name) : r.name),
       el("td", {class:"mono"}, r.domain), blockCell({name:r.domain, blocked:r.blocked}))),
-    liveRows.length ? "Nothing matches." : "Nothing since netinv started."));
+    liveRows.length ? "Nothing matches." : "Nothing since lanledger started."));
 }
 $("#livefilter").addEventListener("input", renderLive);
 $("#livepause").addEventListener("click", e => {
@@ -1260,10 +1260,10 @@ async function loadSettings(){
   // deco
   const dc = st.deco, host = el("input", {type:"text", value:dc.host || "", placeholder:"Address of the main Deco, e.g. 192.168.68.1"}), dpw = el("input", {type:"password", autocomplete:"off"});
   fill($("#set-deco"),
-    el("p", {}, "Connect your Deco and netinv uses the names you gave devices in the Deco app, shows whether each is wired or on Wi-Fi (and guest Wi-Fi), and estimates how much data each one moves. netinv only reads from the Deco; it changes nothing on it."),
-    !dc.available ? el("div", {class:"note"}, "The Deco add-on (deco.py) is missing on the Pi. Get the latest netinv and run sudo ./install.sh.") : null,
+    el("p", {}, "Connect your Deco and lanledger uses the names you gave devices in the Deco app, shows whether each is wired or on Wi-Fi (and guest Wi-Fi), and estimates how much data each one moves. lanledger only reads from the Deco; it changes nothing on it."),
+    !dc.available ? el("div", {class:"note"}, "The Deco add-on (deco.py) is missing on the Pi. Get the latest lanledger and run sudo ./install.sh.") : null,
     dc.configured ? el("div", {class:"big"}, el("span", {class:"dot " + (dc.ok ? "on" : "bad")}), dc.ok ? `Connected · ${dc.clients} devices online on the mesh` : "Not working right now") : null,
-    dc.configured && !dc.ok && dc.msg ? el("div", {class:"note"}, dc.msg, dc.halted ? " netinv has stopped trying, so the Deco does not lock your account. Enter the password again below." : "") : null,
+    dc.configured && !dc.ok && dc.msg ? el("div", {class:"note"}, dc.msg, dc.halted ? " lanledger has stopped trying, so the Deco does not lock your account. Enter the password again below." : "") : null,
     dc.nodes.length ? el("ul", {class:"lst"}, dc.nodes.map(n => el("li", {}, el("span", {class:"dot " + (n.online ? "on" : "")}),
       el("span", {class:"grow"}, el("b", {}, n.name), ` ${n.model}`, n.main ? " · main unit" : ""), el("span", {class:"when mono"}, n.ip)))) : null,
     el("div", {class:"form"}, field("Deco address", host), field("Deco owner password (your TP-Link ID password)", dpw),
@@ -1272,7 +1272,7 @@ async function loadSettings(){
         dc.configured ? el("button", {class:"ghost", onclick:() => act("/api/settings/deco", {host:""}, "Deco disconnected")}, "Disconnect") : null)),
     el("ul", {class:"help", style:"margin:12px 0 0;padding-left:18px;color:var(--mute);font-size:13.5px"},
       el("li", {}, "It must be the owner account. A Deco allows one owner session at a time, so if you also open the Deco app as the owner, one of the two gets signed out. The usual fix: in the Deco app, add a manager account (More > Managers) and use that one in the app."),
-      el("li", {}, "The password is stored on the Pi so netinv can sign in again by itself. That is why a dashboard password is required first."),
+      el("li", {}, "The password is stored on the Pi so lanledger can sign in again by itself. That is why a dashboard password is required first."),
       el("li", {}, "Data figures are estimates from the speeds the Deco reports, sampled every 30 seconds.")));
   // alerts
   const url = el("input", {type:"text", value:st.notify_url || "", placeholder:"https://ntfy.sh/a-name-nobody-would-guess"});
@@ -1328,7 +1328,7 @@ addEventListener("hashchange", () => { const h = readHash(); setTab(h.t); if (h.
 $("#devfilter").addEventListener("input", renderDevices);
 function setView(v){
   view = v;
-  try { localStorage.setItem("netinv-view", v); } catch (e) {}
+  try { localStorage.setItem("lanledger-view", v); } catch (e) {}
   for (const b of document.querySelectorAll("#viewseg button")) b.setAttribute("aria-pressed", String(b.dataset.view === v));
   renderDevices();
 }
@@ -1337,7 +1337,7 @@ setView(view);
 $("#theme").addEventListener("click", () => {
   const light = document.documentElement.dataset.theme !== "light";
   if (light) document.documentElement.dataset.theme = "light"; else delete document.documentElement.dataset.theme;
-  try { localStorage.setItem("netinv-theme", light ? "light" : "dark"); } catch (e) {}
+  try { localStorage.setItem("lanledger-theme", light ? "light" : "dark"); } catch (e) {}
   $("#theme").textContent = light ? "☾" : "☀";
 });
 if (document.documentElement.dataset.theme === "light") $("#theme").textContent = "☾";
@@ -1357,7 +1357,7 @@ async function refresh(){
   } catch (e) {
     if (!$("#login").hidden) return;
     $("#sdot").className = "dot bad"; $("#status").classList.add("bad");
-    $("#stext").textContent = "cannot reach netinv, retrying";
+    $("#stext").textContent = "cannot reach lanledger, retrying";
   }
 }
 { const h = readHash(); selected = h.t === "devices" ? h.mac : null; tab = h.t; setTab(h.t); }

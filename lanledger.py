@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""netinv - what is on your home network, and what is it doing? For a Raspberry Pi.
+"""lanledger - what is on your home network, and what is it doing? For a Raspberry Pi.
 
 One SQLite file, standard library only. A handful of threads:
   scanner : ARP-sweeps the LAN (arp-scan), keeps the device inventory, records who comes and goes
@@ -89,7 +89,7 @@ LISTS = {
     "fakenews": ("Fake news", "Sites known for fabricated news.", _SB + "alternates/fakenews-only/hosts"),
 }
 
-# The doors netinv knocks on when asked to check a device: port -> (what it is, why it matters or "").
+# The doors lanledger knocks on when asked to check a device: port -> (what it is, why it matters or "").
 PORTS = {
     21: ("FTP file transfer", "Old and unencrypted. Turn it off if you do not use it."),
     22: ("SSH remote login", ""),
@@ -172,8 +172,8 @@ QUERY_RE = re.compile(
     r"query\[([\w-]+)\]\s+(\S+)\s+from\s+(\S+)")
 # A name we are willing to write into dnsmasq's config: plain hostname labels, at least two of them.
 DOMAIN_RE = re.compile(r"(?=.{4,253}$)(?:[a-z0-9_](?:[a-z0-9_-]{0,61}[a-z0-9_])?\.)+[a-z][a-z0-9-]{1,62}")
-PI_VENDOR = "this Pi (netinv)"
-SILENT_DAYS = 7  # an online device with no lookups for this long is flagged as bypassing netinv
+PI_VENDOR = "this Pi (lanledger)"
+SILENT_DAYS = 7  # an online device with no lookups for this long is flagged as bypassing lanledger
 ARP_TRUST = 600  # seconds the Pi's own sighting of an address outranks what the Deco says about it
 CUT_OFF = 1800   # online according to the Deco but unanswered by the Pi for this long: isolated from the Pi
 OUI_URL = "https://standards-oui.ieee.org/oui/oui.csv"  # the public register of who makes which hardware addresses
@@ -576,7 +576,7 @@ class App:
         if not url:
             return "No alert address is set."
         try:
-            req = urllib.request.Request(url, data=text.encode(), headers={"Title": "netinv"})
+            req = urllib.request.Request(url, data=text.encode(), headers={"Title": "lanledger"})
             urllib.request.urlopen(req, timeout=8).close()
             return ""
         except (OSError, ValueError) as e:
@@ -787,7 +787,7 @@ class App:
             return
         self.oui_tried = now
         try:
-            req = urllib.request.Request(self.a.oui_url, headers={"User-Agent": "Mozilla/5.0 (compatible; netinv)"})
+            req = urllib.request.Request(self.a.oui_url, headers={"User-Agent": "Mozilla/5.0 (compatible; lanledger)"})
             with urllib.request.urlopen(req, timeout=60) as r:
                 table = parse_oui(r.read(40_000_000).decode("utf-8", "replace"))
             if len(table) < 1000:
@@ -849,7 +849,7 @@ class App:
             got, t0 = 0, time.time()
             try:
                 while time.time() - t0 < 6:  # a fast line finishes one download early: keep going for a fair reading
-                    req = urllib.request.Request(SPEED_URL, headers={"User-Agent": "netinv"})
+                    req = urllib.request.Request(SPEED_URL, headers={"User-Agent": "lanledger"})
                     with urllib.request.urlopen(req, timeout=10) as r:
                         while time.time() - t0 < 8:
                             chunk = r.read(262144)
@@ -1081,7 +1081,7 @@ class App:
             r["spark"] = sparks.get(mac) or [0] * 24
             cats = doing.get(mac, [])
             r["hint"] = name_hint(r) or service_hint(r.get("services") or "") or hints.get(mac, "")
-            # the router, the mesh units and this Pi do not ask netinv for addresses, so silence from them is normal
+            # the router, the mesh units and this Pi do not ask lanledger for addresses, so silence from them is normal
             r["infra"] = ("router" if self.a.gateway and r["ip"] == self.a.gateway else "pi" if r["vendor"] == PI_VENDOR
                           else "mesh" if is_mesh(r) else "")
             # which mesh unit this row is, so the map can draw each unit with its own devices around it
@@ -1089,7 +1089,7 @@ class App:
                                         or len(n.get("mac") or "") == 17 and n["mac"][:14] == mac[:14]), None)
             r["unit"], r["unit_main"] = (unit["name"][:60], int(bool(unit.get("main")))) if unit else ("", 0)
             # The Deco says it is online, yet it has not answered the Pi's sweep for a good while: the two are being
-            # kept apart, which is what the Deco's Device Isolation does. Its lookups cannot reach netinv either.
+            # kept apart, which is what the Deco's Device Isolation does. Its lookups cannot reach lanledger either.
             r["isolated"] = int(bool(swept and r["online"] and not r["infra"] and not r["randomized"] and not mac.startswith("ip:")
                                      and (r.get("arp_seen") or 0) < now - CUT_OFF and r["first_seen"] < now - CUT_OFF))
             r["mostly"] = mostly(cats)
@@ -1257,7 +1257,7 @@ class App:
         except ValueError:
             ip = None
         if not ip or not ip.is_private:
-            raise ValueError("netinv only checks devices on your own network, and this one has no address right now.")
+            raise ValueError("lanledger only checks devices on your own network, and this one has no address right now.")
 
         def knock(port):
             try:
@@ -1308,7 +1308,7 @@ class App:
         self.allow = {r["domain"] for r in self.q("SELECT domain FROM allowed")}
         if not self.a.block_file:
             return
-        body = "# Managed by netinv. Edit the block list from the dashboard.\n" + "".join(f"server=/{d}/\n" for d in sorted(active))
+        body = "# Managed by lanledger. Edit the block list from the dashboard.\n" + "".join(f"server=/{d}/\n" for d in sorted(active))
         self.write_if_changed(self.a.block_file, body)
 
     @staticmethod
@@ -1323,7 +1323,7 @@ class App:
             # written in place, not renamed over: the systemd path unit watches this very file
             with open(path, "w", newline="\n") as f:
                 f.write(body)
-            os.chmod(path, 0o644)  # dnsmasq runs as another user and must read this, whatever netinv's own files default to
+            os.chmod(path, 0o644)  # dnsmasq runs as another user and must read this, whatever lanledger's own files default to
         except OSError as e:
             print("cannot write", path, e, flush=True)
             raise ValueError("Could not write the block list file.")
@@ -1344,7 +1344,7 @@ class App:
             name = str(body["service"])
             domains = sorted(d for d, (svc, cat) in SERVICE.items() if svc == name and cat not in UNBLOCKABLE)
             if not domains:
-                raise ValueError("netinv does not know that service well enough to block all of it.")
+                raise ValueError("lanledger does not know that service well enough to block all of it.")
             return domains
         return [self.clean_domain(body.get("domain"))]
 
@@ -1420,7 +1420,7 @@ class App:
         if not self.a.block_hosts:
             return
         names = sorted(n for n in self.list_set if not self.is_allowed(n))
-        self.write_if_changed(self.a.block_hosts, "# Managed by netinv: subscribed block lists.\n" +
+        self.write_if_changed(self.a.block_hosts, "# Managed by lanledger: subscribed block lists.\n" +
                               "".join(f"0.0.0.0 {n}\n:: {n}\n" for n in names))
 
     def fetch_list(self, list_id):
@@ -1560,7 +1560,7 @@ class App:
             self.x("UPDATE devices SET conn='', net='', node=''")
             return {"ok": True}
         if deco is None:
-            raise ValueError("deco.py is missing next to netinv.py. Re-run install.sh.")
+            raise ValueError("deco.py is missing next to lanledger.py. Re-run install.sh.")
         if not password:
             raise ValueError("Enter the Deco owner password.")
         m = re.fullmatch(r"(https?://)?([A-Za-z0-9.\-]+)(:\d+)?/?", host)
@@ -1598,7 +1598,7 @@ class App:
         else:
             self.x("DELETE FROM meta WHERE k='notify_url'")
         if url and body.get("test"):
-            err = self.notify("Test from netinv: alerts are working.")
+            err = self.notify("Test from lanledger: alerts are working.")
             if err:
                 raise ValueError(err)
         return {"ok": True}
@@ -1609,13 +1609,13 @@ ICON = ('<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64"><defs><line
         '<rect width="64" height="64" rx="14" fill="#090c13"/><g fill="none" stroke="url(#g)" stroke-width="3.6" stroke-linecap="round">'
         '<path d="M32 32 15 17M32 32l20-11M32 32 17 50M32 32l18 15"/></g><g fill="url(#g)"><circle cx="32" cy="32" r="7.5"/>'
         '<circle cx="15" cy="17" r="5"/><circle cx="52" cy="21" r="5"/><circle cx="17" cy="50" r="5"/><circle cx="50" cy="47" r="5"/></g></svg>')
-MANIFEST = {"name": "netinv", "short_name": "netinv", "start_url": "/", "display": "standalone",
+MANIFEST = {"name": "lanledger", "short_name": "lanledger", "start_url": "/", "display": "standalone",
             "background_color": "#090c13", "theme_color": "#090c13",
             "icons": [{"src": "/icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any"}]}
 
 
 class Handler(BaseHTTPRequestHandler):
-    server_version = "netinv"
+    server_version = "lanledger"
     timeout = 30  # a connection that goes quiet is dropped, not held open for ever
 
     def log_message(self, *a):
@@ -1642,7 +1642,7 @@ class Handler(BaseHTTPRequestHandler):
             return peer
 
     def token(self):
-        m = re.search(r"(?:^|;\s*)netinv=([A-Za-z0-9_\-]{20,80})", self.headers.get("Cookie") or "")
+        m = re.search(r"(?:^|;\s*)lanledger=([A-Za-z0-9_\-]{20,80})", self.headers.get("Cookie") or "")
         return m.group(1) if m else ""
 
     def send(self, code, body, ctype="application/json", filename=None, token=None):
@@ -1654,7 +1654,7 @@ class Handler(BaseHTTPRequestHandler):
             self.send_header("Content-Disposition", f'attachment; filename="{filename}"')
         if token is not None:  # "" signs out
             age = SESSION_DAYS * 86400 if token else 0
-            self.send_header("Set-Cookie", f"netinv={token}; Path=/; Max-Age={age}; HttpOnly; SameSite=Strict")
+            self.send_header("Set-Cookie", f"lanledger={token}; Path=/; Max-Age={age}; HttpOnly; SameSite=Strict")
         self.send_header("Content-Length", str(len(body)))
         self.send_header("Cache-Control", "no-store")
         self.send_header("X-Content-Type-Options", "nosniff")
@@ -1684,7 +1684,7 @@ class Handler(BaseHTTPRequestHandler):
         if not authed:
             return self.send(401, {"error": "sign in", "setup": not app.meta("pw_hash")})
         if u.path == "/api/devices.csv":
-            return self.send(200, app.devices_csv(), "text/csv; charset=utf-8", "netinv-devices.csv")
+            return self.send(200, app.devices_csv(), "text/csv; charset=utf-8", "lanledger-devices.csv")
         fn = {"/api/summary": app.api_summary, "/api/devices": app.api_devices, "/api/device": app.api_device,
               "/api/domain": app.api_domain, "/api/live": app.api_live, "/api/attention": app.api_attention,
               "/api/blocked": app.api_blocked, "/api/events": app.api_events, "/api/health": app.api_health,
@@ -1741,8 +1741,8 @@ class Handler(BaseHTTPRequestHandler):
 
 def main():
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    ap.add_argument("--db", default="/var/lib/netinv/netinv.db")
-    ap.add_argument("--log", default="/var/log/netinv/dnsmasq.log", help="dnsmasq query log to follow")
+    ap.add_argument("--db", default="/var/lib/lanledger/lanledger.db")
+    ap.add_argument("--log", default="/var/log/lanledger/dnsmasq.log", help="dnsmasq query log to follow")
     ap.add_argument("--iface", default="", help="LAN interface, e.g. eth0")
     ap.add_argument("--gateway", default="", help="router IP, used for reverse-DNS hostnames")
     ap.add_argument("--bind", default="0.0.0.0")
@@ -1750,8 +1750,8 @@ def main():
     ap.add_argument("--scan-interval", type=int, default=60, help="seconds between ARP sweeps")
     ap.add_argument("--retention-days", type=int, default=30)
     ap.add_argument("--scan-cmd", default="", help="override the scan command (testing)")
-    ap.add_argument("--block-file", default="", help="dnsmasq servers-file netinv may write blocked domains to")
-    ap.add_argument("--block-hosts", default="", help="dnsmasq addn-hosts file netinv may write subscribed block lists to")
+    ap.add_argument("--block-file", default="", help="dnsmasq servers-file lanledger may write blocked domains to")
+    ap.add_argument("--block-hosts", default="", help="dnsmasq addn-hosts file lanledger may write subscribed block lists to")
     ap.add_argument("--list-base", default="", help="fetch block lists from <base>/<id> instead of their usual home (testing)")
     ap.add_argument("--notify-url", default="",
                     help="POST a line of text here when a new device joins (e.g. an ntfy.sh topic URL)")
@@ -1774,7 +1774,7 @@ def main():
     srv.app = app
     host = socket.gethostname().lower()
     srv.allowed_hosts = {"localhost", host, host + ".local", host + ".lan", host + ".home"} | {h.lower() for h in a.allow_host}
-    print(f"netinv listening on http://{a.bind}:{a.port}", flush=True)
+    print(f"lanledger listening on http://{a.bind}:{a.port}", flush=True)
     srv.serve_forever()
 
 

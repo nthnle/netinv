@@ -1,4 +1,4 @@
-"""Tests for the parts of netinv that have gone wrong before. Standard library only:
+"""Tests for the parts of lanledger that have gone wrong before. Standard library only:
 
     python3 -m unittest discover tests
 """
@@ -11,7 +11,7 @@ import unittest
 
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), ".."))
 import deco  # noqa: E402
-import netinv  # noqa: E402
+import lanledger  # noqa: E402
 
 DAY = 86400
 A, B, C = "a8:aa:aa:aa:aa:01", "a8:aa:aa:aa:aa:02", "a8:aa:aa:aa:aa:03"
@@ -22,7 +22,7 @@ class Case(unittest.TestCase):
     def setUp(self):
         self.dir = tempfile.TemporaryDirectory()
         self.addCleanup(self.dir.cleanup)
-        self.app = netinv.App(argparse.Namespace(
+        self.app = lanledger.App(argparse.Namespace(
             db=os.path.join(self.dir.name, "t.db"), gateway="", retention_days=30, scan_interval=60, block_file="",
             block_hosts="", list_base="", notify_url="", no_probe=True, log="", iface="", scan_cmd="", oui_url=""))
         self.addCleanup(self.app.db.close)
@@ -36,7 +36,7 @@ class Case(unittest.TestCase):
     def lookups(self, mac, days_ago, domain="x.example.com", count=5):
         hour = self.now - self.now % 3600 - days_ago * DAY
         self.app.x("INSERT INTO dns_hourly(dev, domain, base, hour, count) VALUES(?,?,?,?,?)",
-                   (mac, domain, netinv.base_domain(domain), hour, count))
+                   (mac, domain, lanledger.base_domain(domain), hour, count))
         self.app.hint_cache, self.app.day_cache = (0, {}), (0, {}, [])
 
     def devices(self):
@@ -76,7 +76,7 @@ class Attribution(Case):
         self.assertEqual(self.line("10.0.0.6"), B)
 
     def test_an_old_sighting_no_longer_outranks_the_deco(self):
-        self.app.seen(A, "10.0.0.5", "", self.now - netinv.ARP_TRUST - 1)
+        self.app.seen(A, "10.0.0.5", "", self.now - lanledger.ARP_TRUST - 1)
         self.app.seen(B, "10.0.0.5", "", self.now, arp=False)
         self.assertEqual(self.line("10.0.0.5"), B)
 
@@ -106,7 +106,7 @@ class Attribution(Case):
         self.app.seen(A, "10.0.0.5", "", self.now - 3600, arp=False)
         self.app.seen(B, "10.0.0.5", "", self.now, arp=False)
         self.app.x("UPDATE devices SET ip='10.0.0.5'")
-        again = netinv.App(self.app.a)
+        again = lanledger.App(self.app.a)
         self.addCleanup(again.db.close)
         self.assertEqual(again.ipmap["10.0.0.5"], B)
 
@@ -133,7 +133,7 @@ class Hints(Case):
         for name, want in (("HS300", "TP-Link / Kasa smart device"), ("MyQ-3FC", "myQ garage door opener"), ("LGwebOSTV", "LG TV"),
                            ("BRWBCF4D443D255", "Brother printer"), ("espressif", "Small Wi-Fi gadget (Espressif chip)"),
                            ("Android-2", ""), ("wlan0", ""), ("", "")):
-            self.assertEqual(netinv.name_hint({"deco_name": name}), want, name)
+            self.assertEqual(lanledger.name_hint({"deco_name": name}), want, name)
 
     def test_an_announced_name_follows_the_device_that_has_it_now(self):
         self.device(A, ip="10.0.0.7", mdns="Clock", services="googlecast")
@@ -147,12 +147,12 @@ class Makers(Case):
     CSV = 'Registry,Assignment,Organization Name,Organization Address\nMA-L,788CB5,"TP-Link  Corporation Limited","x"\nMA-L,zz,Bad,x\n'
 
     def test_the_register_is_read(self):
-        self.assertEqual(netinv.parse_oui(self.CSV), {"788CB5": "TP-Link Corporation Limited"})
+        self.assertEqual(lanledger.parse_oui(self.CSV), {"788CB5": "TP-Link Corporation Limited"})
 
     def test_missing_makers_are_filled_in_but_private_addresses_are_not(self):
         private = "7a:8c:b5:00:00:01"  # locally administered: made up by the phone, tells nothing about its maker
         self.app.seen("78:8c:b5:a0:ec:6a", "10.0.0.2", "", self.now)
-        self.app.oui = netinv.parse_oui(self.CSV) | {"7A8CB5": "Nobody"}
+        self.app.oui = lanledger.parse_oui(self.CSV) | {"7A8CB5": "Nobody"}
         self.app.fill_makers()
         self.app.seen("78:8c:b5:a0:ec:6b", "10.0.0.3", "", self.now)
         self.app.seen(private, "10.0.0.4", "", self.now)
@@ -161,7 +161,7 @@ class Makers(Case):
                          ["TP-Link Corporation Limited"] * 2 + [""])
 
     def test_what_the_sweep_reports_is_kept(self):
-        self.app.oui = netinv.parse_oui(self.CSV)
+        self.app.oui = lanledger.parse_oui(self.CSV)
         self.app.seen("78:8c:b5:a0:ec:6a", "10.0.0.2", "From arp-scan", self.now)
         self.assertEqual(self.devices()["78:8c:b5:a0:ec:6a"]["vendor"], "From arp-scan")
 

@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Read-only client for the local web interface of a TP-Link Deco mesh.
 
-Used by netinv to learn what the Deco knows about each device: the name set in the
+Used by lanledger to learn what the Deco knows about each device: the name set in the
 Deco app, wired or Wi-Fi, main or guest network, and current up/down speed.
 
 The protocol (RSA-wrapped login, AES-CBC request bodies) follows the open-source Home
@@ -204,7 +204,7 @@ class Deco:
                                 "somewhere else (the Deco app). See the README about using a manager account in the app.")
             if e.code == 401:
                 self.reset()
-                raise DecoError("This Deco's firmware uses an older sign-in method that netinv does not support.")
+                raise DecoError("This Deco's firmware uses an older sign-in method that lanledger does not support.")
             raise DecoError(f"The Deco answered with an error (HTTP {e.code}).")
         except (OSError, ValueError) as e:
             raise DecoError(f"Could not reach the Deco at {self.host} ({e}).")

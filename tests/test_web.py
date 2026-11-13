@@ -16,7 +16,7 @@ from http.server import ThreadingHTTPServer
 from unittest import mock
 
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), ".."))
-import netinv  # noqa: E402
+import lanledger  # noqa: E402
 
 PASSWORD = "correct horse battery"
 real_lookup = socket.getaddrinfo
@@ -26,12 +26,12 @@ class Web(unittest.TestCase):
     def setUp(self):
         self.dir = tempfile.TemporaryDirectory()
         self.addCleanup(self.dir.cleanup)
-        self.app = netinv.App(argparse.Namespace(
+        self.app = lanledger.App(argparse.Namespace(
             db=os.path.join(self.dir.name, "t.db"), gateway="", retention_days=30, scan_interval=60,
             block_file=os.path.join(self.dir.name, "blocked.conf"), block_hosts="", list_base="", notify_url="",
             no_probe=True, log="", iface="", scan_cmd="", oui_url=""))
         self.addCleanup(self.app.db.close)
-        self.srv = ThreadingHTTPServer(("127.0.0.1", 0), netinv.Handler)
+        self.srv = ThreadingHTTPServer(("127.0.0.1", 0), lanledger.Handler)
         self.srv.app, self.srv.allowed_hosts = self.app, {"localhost"}
         self.port = self.srv.server_address[1]
         threading.Thread(target=self.srv.serve_forever, daemon=True).start()
@@ -148,7 +148,7 @@ class SignIn(Web):
         self.assertEqual(self.call("POST", "/api/login", {"password": PASSWORD}, via("192.168.68.51"))[0], 200)
 
     def test_only_a_proxy_on_the_pi_is_believed_about_who_is_calling(self):
-        h = netinv.Handler.__new__(netinv.Handler)
+        h = lanledger.Handler.__new__(lanledger.Handler)
         h.headers = {"X-Forwarded-For": "10.9.9.9"}
         h.client_address = ("192.168.68.77", 1234)
         self.assertEqual(h.who(), "192.168.68.77")           # a device claiming to be someone else is not believed
@@ -175,9 +175,9 @@ class Hostile(Web):
             self.assertIn("400", self.raw((head % length).encode()), length)
 
     def test_a_silent_connection_is_dropped(self):
-        self.assertIsNotNone(netinv.Handler.timeout)
-        old, netinv.Handler.timeout = netinv.Handler.timeout, 1
-        self.addCleanup(setattr, netinv.Handler, "timeout", old)
+        self.assertIsNotNone(lanledger.Handler.timeout)
+        old, lanledger.Handler.timeout = lanledger.Handler.timeout, 1
+        self.addCleanup(setattr, lanledger.Handler, "timeout", old)
         s = socket.create_connection(("127.0.0.1", self.port))
         s.settimeout(6)
         self.addCleanup(s.close)
@@ -206,7 +206,7 @@ class Hostile(Web):
 
             def clients(self):
                 return []
-        with mock.patch("netinv.socket.getaddrinfo", lookup), mock.patch("netinv.deco.Deco", FakeDeco):
+        with mock.patch("lanledger.socket.getaddrinfo", lookup), mock.patch("lanledger.deco.Deco", FakeDeco):
             for host in ("8.8.8.8", "http://1.1.1.1", "deco.example"):
                 status, body = self.call("POST", "/api/settings/deco", {"host": host, "password": "x"})
                 self.assertEqual(status, 400, host)
@@ -217,7 +217,7 @@ class Hostile(Web):
             self.assertEqual(self.app.meta("deco_host"), "https://192.168.68.1:8443")
 
     @unittest.skipIf(os.name == "nt", "file modes are a Unix matter")
-    def test_a_block_file_netinv_has_to_recreate_stays_readable_by_dnsmasq(self):
+    def test_a_block_file_lanledger_has_to_recreate_stays_readable_by_dnsmasq(self):
         old = os.umask(0o077)   # as the service runs
         self.addCleanup(os.umask, old)
         self.set_password()

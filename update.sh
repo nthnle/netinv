@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Update netinv: fetch the latest version and reinstall it with the options used before. Run: ./update.sh
+# Update lanledger: fetch the latest version and reinstall it with the options used before. Run: ./update.sh
 set -euo pipefail
 cd "$(dirname "$0")"
 
