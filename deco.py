@@ -263,10 +263,11 @@ class Deco:
             if attempt:
                 raise DecoError(f"The Deco returned an error ({code}).")
 
-    def clients(self):
-        """Every device the mesh knows. Speeds are bytes per second."""
+    def clients(self, node="default"):
+        """Every device the mesh knows, or with a unit's id (from nodes()) only those connected
+        through that unit. Speeds are bytes per second."""
         out = []
-        for c in self.call("admin/client", "client_list", {"operation": "read", "params": {"device_mac": "default"}}).get("client_list", []):
+        for c in self.call("admin/client", "client_list", {"operation": "read", "params": {"device_mac": node}}).get("client_list", []):
             mac = str(c.get("mac", "")).replace("-", ":").lower()
             if len(mac) != 17:
                 continue
@@ -280,7 +281,7 @@ class Deco:
         """The Deco units themselves."""
         out = []
         for d in self.call("admin/device", "device_list", {"operation": "read"}).get("device_list", []):
-            out.append({"mac": str(d.get("mac", "")).replace("-", ":").lower(), "name": _name(d.get("custom_nickname")) or d.get("nickname") or "Deco",
+            out.append({"id": d.get("mac") or "", "mac": str(d.get("mac", "")).replace("-", ":").lower(), "name": _name(d.get("custom_nickname")) or d.get("nickname") or "Deco",
                         "model": d.get("device_model") or "", "ip": d.get("device_ip") or "", "main": d.get("role") == "master",
                         "online": d.get("group_status") == "connected", "internet": d.get("inet_status") == "online"})
         return out
@@ -295,7 +296,14 @@ if __name__ == "__main__":
     try:
         for n in deco.nodes():
             print(f"Deco  {n['name']:<22} {n['model']:<8} {n['ip']:<15} {'main' if n['main'] else 'satellite'}  {'online' if n['online'] else 'offline'}")
+        where = {}
+        for n in deco.nodes():
+            try:
+                where.update({c["mac"]: n["name"] for c in deco.clients(n["id"]) if c["online"]})
+            except DecoError as e:
+                print(f"(could not ask {n['name']} for its own devices: {e})")
         for c in sorted(deco.clients(), key=lambda c: not c["online"]):
+            print(f"{where.get(c['mac'], '-')[:14]:<14} ", end="")
             print(f"{'on ' if c['online'] else 'off'}   {c['name'][:22]:<22} {c['mac']}  {c['ip']:<15} {c['conn']:<8} {c['net']:<6} "
                   f"down {c['down'] / 1000:.0f} kB/s  up {c['up'] / 1000:.0f} kB/s")
     except DecoError as e:

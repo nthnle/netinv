@@ -340,6 +340,7 @@ input[type=password]{flex:1 1 180px;max-width:360px}
       <li>Before a device can reach a site it asks for the site's address. That question is a <b>lookup</b>. netinv counts lookups, so it knows which sites a device contacted and roughly how often. It cannot see pages, messages, or how much data moved.</li>
       <li>A device name marked <b>guess</b> was worked out from what the device looks up. Give the device a name to replace the guess.</li>
       <li>Devices using a VPN, iCloud Private Relay or their own private DNS show little or nothing here. netinv flags them when it can tell.</li>
+      <li>With more than one Deco unit, each device shows which unit it connects through. That is usually the nearest one, so it hints at where the device is. Type a unit's name in the search box to see everything on it.</li>
       <li>With a Deco connected (Settings), devices take the names from the Deco app, and netinv estimates how much data each one moved from the speeds the Deco reports.</li>
       <li><b>Blocking</b> a site makes its lookups fail for the whole network. It can take a few minutes to kick in, and it cannot block a single device.</li>
     </ul>
@@ -402,6 +403,8 @@ const fmtRate = n => fmtBytes(n) + "/s";
 const when = ts => new Date(ts*1000).toLocaleString([], {month:"short", day:"numeric", hour:"numeric", minute:"2-digit"});
 const CONN = {wired:"Wired", band5:"Wi-Fi 5 GHz", band2_4:"Wi-Fi 2.4 GHz", band6:"Wi-Fi 6 GHz"};
 const connName = c => CONN[c] || c || "";
+// "Office" -> "Office Deco": the mesh unit a device connects through, which says roughly where it is.
+const nodeName = d => d.node ? (/deco/i.test(d.node) ? d.node : d.node + " Deco") : "";
 const hourLabel = ts => new Date(ts*1000).toLocaleString([], {month:"short", day:"numeric", hour:"numeric"});
 const narrow = () => matchMedia("(max-width:900px)").matches;
 let toastTimer;
@@ -746,7 +749,7 @@ function attnRow(it){
   let title, text, btns;
   if (it.kind === "new") {
     title = isUnnamed(d) ? (isGuess(d) ? `New device, probably: ${n}` : "New device netinv cannot identify") : `New device: ${n}`;
-    text = `First seen ${ago(d.first_seen)}${where}.` + (d.vendor ? ` Made by ${d.vendor}.` : "") + " Is it yours?";
+    text = `First seen ${ago(d.first_seen)}${where}.` + (d.vendor ? ` Made by ${d.vendor}.` : "") + (d.node ? ` Connected through the ${nodeName(d)}.` : "") + " Is it yours?";
     btns = [el("button", {class:"act", onclick:() => openDevice(d.mac, true)}, "Name it"),
             el("button", {class:"ghost", title:"Mark it as reviewed without naming it", onclick:() => update(d.mac, {known:true}, "Marked as reviewed")}, "It's fine")];
   } else if (it.kind === "silent") {
@@ -822,7 +825,7 @@ function renderDevices(){
   for (const th of document.querySelectorAll("th[data-sort]")) {
     if (th.dataset.sort === sort.key) th.setAttribute("aria-sort", sort.dir > 0 ? "ascending" : "descending"); else th.removeAttribute("aria-sort");
   }
-  let list = devices.filter(FILTERS[filter]).filter(d => !f || [d.label,d.deco_name,d.mdns,d.owner,d.hostname,d.hint,d.vendor,d.mac,d.ip,d.mostly,connName(d.conn)].join(" ").toLowerCase().includes(f));
+  let list = devices.filter(FILTERS[filter]).filter(d => !f || [d.label,d.deco_name,d.mdns,d.owner,d.hostname,d.hint,d.vendor,d.mac,d.ip,d.mostly,connName(d.conn),nodeName(d)].join(" ").toLowerCase().includes(f));
   if (sort.key) {
     const get = SORTS[sort.key][0];
     list = list.slice().sort((a, b) => { const x = get(a), y = get(b); return (x < y ? -1 : x > y ? 1 : 0) * sort.dir; });
@@ -831,7 +834,7 @@ function renderDevices(){
   const rows = list.map(d => {
     const name = devName(d);
     const conn = connName(d.conn_live || d.conn).replace("Wi-Fi ", "");
-    const sub = [isGuess(d) ? "guessed from its activity" : null, d.owner || null, conn || null, isUnnamed(d) && d.vendor && d.vendor !== name ? d.vendor : null, d.ip,
+    const sub = [isGuess(d) ? "guessed from its activity" : null, d.owner || null, conn || null, nodeName(d) || null, isUnnamed(d) && d.vendor && d.vendor !== name ? d.vendor : null, d.ip,
       isReal(d) ? null : "seen only by its lookups"].filter(Boolean).join(" · ");
     return clickRow(() => select(d.mac), {class: d.mac === selected ? "sel" : "", "data-mac":d.mac, "aria-selected": d.mac === selected ? "true" : null},
       el("td", {}, el("div", {class:"dev"}, icon(d), el("div", {},
@@ -917,6 +920,7 @@ function detailHead(d){
     el("dl", {}, row("IP address", d.ip, 1), row("IPv6 address", d.ip6, 1),
       row("Hardware address (MAC)", real ? d.mac + (d.randomized ? "  (private: made up by the device for this network)" : "") : "not seen", 1),
       row("Connection", [connName(d.conn_live || d.conn), d.net === "guest" ? "guest network" : ""].filter(Boolean).join(", ")),
+      row("Connects through", nodeName(d)),
       row("Name in the Deco app", d.deco_name), row("Name it announces", d.mdns), row("Name from the router", d.hostname),
       row("Services it announces", (d.services || "").split(",").filter(Boolean).join(", ")), row("Maker", d.vendor), row("Looks like", d.hint),
       row("First seen", real && d.first_seen ? new Date(d.first_seen*1000).toLocaleString([], {dateStyle:"medium", timeStyle:"short"}) : null)),
@@ -924,7 +928,7 @@ function detailHead(d){
   return [
     el("div", {class:"dtitle"}, icon(d, true),
       el("div", {}, el("h2", {}, devName(d), d.known ? null : el("span", {class:"tag new"}, "new")),
-        el("div", {class:"dstate"}, [d.online ? "Online now" : "Offline, last seen " + ago(d.last_seen), d.owner, connName(d.conn_live || d.conn),
+        el("div", {class:"dstate"}, [d.online ? "Online now" : "Offline, last seen " + ago(d.last_seen), d.owner, connName(d.conn_live || d.conn), nodeName(d),
           d.net === "guest" ? "guest Wi-Fi" : "", isGuess(d) ? "name is a guess" : ""].filter(Boolean).join(" · "))),
       el("button", {class:"x", "aria-label":"Close device details", title:"Close", onclick:deselect}, "×")),
     !real ? el("p", {class:"mute", style:"margin-top:12px"}, "netinv saw lookups from this address but never matched it to a device, so it cannot be named.") : null,
@@ -932,6 +936,7 @@ function detailHead(d){
       el("p", {}, d.hint ? `It did not give a name. From what it does, it looks like: ${d.hint}. ` : "It did not give a name, and what it does is not enough to guess. ",
         d.randomized ? "To be sure, open Wi-Fi settings on the device you suspect and compare its Wi-Fi address with the hardware address under Technical details. "
                      : "To be sure, compare the hardware address under Technical details with the one printed on the device or shown in its network settings. ",
+        d.node ? (d.conn === "wired" ? `It is plugged in at the ${nodeName(d)}, directly or through a switch there. ` : `It connects through the ${nodeName(d)}, so it is probably somewhere near it. `) : "",
         "Or switch a device's Wi-Fi off and see whether this one goes offline.",
         hasDeco ? "" : " Connecting your Deco in Settings brings in the names from the Deco app."),
       el("div", {class:"chips"}, TYPES.map(t => el("button", {title:`Start the name with "${t}"`, onclick:() => { labelInput.value = t; labelInput.focus(); }}, t))),

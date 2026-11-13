@@ -70,7 +70,7 @@ MIGRATIONS = [
     ("devices", "mdns", "TEXT DEFAULT ''"), ("devices", "services", "TEXT DEFAULT ''"),
     ("devices", "deco_name", "TEXT DEFAULT ''"), ("devices", "conn", "TEXT DEFAULT ''"),
     ("devices", "net", "TEXT DEFAULT ''"), ("devices", "parent", "TEXT DEFAULT ''"),
-    ("devices", "owner", "TEXT DEFAULT ''"), ("dns_hourly", "blocked", "INTEGER DEFAULT 0"),
+    ("devices", "owner", "TEXT DEFAULT ''"), ("devices", "node", "TEXT DEFAULT ''"), ("dns_hourly", "blocked", "INTEGER DEFAULT 0"),
     ("blocked", "t_from", "INTEGER"), ("blocked", "t_to", "INTEGER"),
 ]
 SESSION_DAYS = 30
@@ -371,6 +371,8 @@ class App:
         self.deco = None
         self.deco_state = {"ok": False, "msg": "", "ts": 0, "clients": 0, "nodes": []}
         self.deco_halt = False
+        self.deco_nodes_retry = 0
+        self.deco_refused = set()  # units that would not list their own devices; said once in the log, not every poll
         self.net_up = None
         self.speed_lock = threading.Lock()
         self.block_active, self.allow, self.list_set = set(), set(), set()
@@ -589,7 +591,30 @@ class App:
                       DO UPDATE SET down=down+excluded.down, up=up+excluded.up""", usage, many=True)
         self.speed = speed
         self.deco_state.update(ok=True, msg="", ts=now, clients=sum(c["online"] for c in clients))
+        self.deco_where(now)
         return now
+
+    def deco_where(self, now):
+        """Which mesh unit each device is connected through: a strong hint to where it physically is.
+        Asked unit by unit. Some firmware refuses that, so a failure only pauses this part."""
+        units = [n for n in self.deco_state["nodes"] if n.get("online") and n.get("id")]
+        if len(units) < 2 or now < self.deco_nodes_retry:
+            return
+        where, answered = {}, False
+        for n in sorted(units, key=lambda n: not n["main"]):  # main unit first: if it lists everyone, the others correct it
+            try:
+                for c in self.deco.clients(n["id"]):
+                    if c["online"]:
+                        where[c["mac"]] = n["name"]
+                answered = True
+            except deco.DecoError as e:
+                if n["id"] not in self.deco_refused:
+                    self.deco_refused.add(n["id"])
+                    print("deco: could not list devices on", n["name"], "-", e, flush=True)
+        if not answered:
+            self.deco_nodes_retry = now + 900
+            return
+        self.x("UPDATE devices SET node=? WHERE mac=? AND node!=?", [(name[:60], mac, name[:60]) for mac, name in where.items()], many=True)
 
     def deco_loop(self):
         last = 0
@@ -908,11 +933,11 @@ class App:
         out = io.StringIO()
         w = csv.writer(out)
         w.writerow(["name", "person", "name_in_deco_app", "announced_name", "hostname", "looks_like", "maker", "ip", "mac",
-                    "connection", "private_mac", "reviewed", "online", "first_seen", "last_seen", "lookups_24h", "mostly_24h"])
+                    "connection", "deco_unit", "private_mac", "reviewed", "online", "first_seen", "last_seen", "lookups_24h", "mostly_24h"])
         for r in self.api_devices({}):
             w.writerow([safe(v) for v in (
                 r["label"], r.get("owner", ""), r.get("deco_name", ""), r.get("mdns", ""), r["hostname"] or "", r["hint"],
-                r["vendor"] or "", r["ip"] or "", "" if r["mac"].startswith("ip:") else r["mac"], r.get("conn", ""),
+                r["vendor"] or "", r["ip"] or "", "" if r["mac"].startswith("ip:") else r["mac"], r.get("conn", ""), r.get("node", ""),
                 r["randomized"], r["known"], r["online"], iso(r["first_seen"]), iso(r["last_seen"]), r["queries"], r["mostly"])])
         return out.getvalue().encode("utf-8-sig")
 
@@ -1335,7 +1360,7 @@ class App:
             self.x("DELETE FROM meta WHERE k IN ('deco_host','deco_password')")
             self.deco, self.deco_halt, self.speed = None, False, {}
             self.deco_state = {"ok": False, "msg": "", "ts": 0, "clients": 0, "nodes": []}
-            self.x("UPDATE devices SET conn='', net=''")
+            self.x("UPDATE devices SET conn='', net='', node=''")
             return {"ok": True}
         if deco is None:
             raise ValueError("deco.py is missing next to netinv.py. Re-run install.sh.")
