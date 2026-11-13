@@ -206,6 +206,30 @@ class Summary(Case):
         self.assertEqual(self.devices()[A]["label"], "Fridge")
 
 
+class DecoCipher(unittest.TestCase):
+    """The Deco's replies are AES-128-CBC. Two ways of doing it here: a library if present, plain Python if not."""
+    KEY, IV = bytes.fromhex("2b7e151628aed2a6abf7158809cf4f3c"), bytes.fromhex("000102030405060708090a0b0c0d0e0f")
+
+    def test_the_published_test_vector(self):   # NIST SP 800-38A, F.2.1
+        plain = bytes.fromhex("6bc1bee22e409f96e93d7e117393172a" "ae2d8a571e03ac9c9eb76fac45af8e51")
+        want = "7649abac8119b246cee98e9b12e9197d" "5086cb9b507219ee95db113a917678b2"
+        for fast in (False, True):
+            self.assertEqual(deco.aes_cbc_encrypt(self.KEY, self.IV, plain, fast=fast)[:32].hex(), want)
+
+    def test_both_ways_agree_and_undo_each_other(self):
+        for size in (0, 1, 15, 16, 17, 1000, 20000):
+            data = os.urandom(size)
+            slow = deco.aes_cbc_encrypt(self.KEY, self.IV, data, fast=False)
+            self.assertEqual(deco.aes_cbc_encrypt(self.KEY, self.IV, data, fast=True), slow, size)
+            for fast in (False, True):
+                self.assertEqual(deco.aes_cbc_decrypt(self.KEY, self.IV, slow, fast=fast), data, size)
+
+    def test_damaged_replies_are_refused(self):
+        for fast in (False, True):
+            with self.assertRaises(ValueError):
+                deco.aes_cbc_decrypt(self.KEY, self.IV, b"not a whole block", fast=fast)
+
+
 class MeshUnits(Case):
     def test_units_from_one_box_are_told_apart(self):
         # three units bought together: hardware addresses alike but for the last two digits, as on a real mesh

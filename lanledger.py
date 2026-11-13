@@ -184,6 +184,7 @@ QUERY_RE = re.compile(
 DOMAIN_RE = re.compile(r"(?=.{4,253}$)(?:[a-z0-9_](?:[a-z0-9_-]{0,61}[a-z0-9_])?\.)+[a-z][a-z0-9-]{1,62}")
 PI_VENDOR = "this Pi (lanledger)"
 SILENT_DAYS = 7  # an online device with no lookups for this long is flagged as bypassing lanledger
+WHERE_EVERY = 300  # seconds between asking each mesh unit which devices are on it
 ARP_TRUST = 600  # seconds the Pi's own sighting of an address outranks what the Deco says about it
 CUT_OFF = 1800   # online according to the Deco but unanswered by the Pi for this long: isolated from the Pi
 OUI_URL = "https://standards-oui.ieee.org/oui/oui.csv"  # the public register of who makes which hardware addresses
@@ -443,6 +444,7 @@ class App:
         self.deco_state = {"ok": False, "msg": "", "ts": 0, "clients": 0, "nodes": []}
         self.deco_halt = False
         self.deco_nodes_retry = 0
+        self.deco_where_ts = 0
         self.deco_refused = set()  # units that would not list their own devices; said once in the log, not every poll
         self.net_up = None
         self.speed_lock = threading.Lock()
@@ -762,8 +764,11 @@ class App:
         """Which mesh unit each device is connected through: a strong hint to where it physically is.
         Asked unit by unit. Some firmware refuses that, so a failure only pauses this part."""
         units = [n for n in self.deco_state["nodes"] if n.get("online") and n.get("id")]
-        if len(units) < 2 or now < self.deco_nodes_retry:
+        # Which unit a device is on changes when it is carried about the house, not by the half minute. Asking every
+        # unit on every poll made six requests where one will do, more than a Deco's web interface answers in time.
+        if len(units) < 2 or now < self.deco_nodes_retry or now - self.deco_where_ts < WHERE_EVERY:
             return
+        self.deco_where_ts = now
         where, answered = {}, False
         for n in sorted(units, key=lambda n: not n["main"]):  # main unit first: if it lists everyone, the others correct it
             try:

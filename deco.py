@@ -6,8 +6,10 @@ Deco app, wired or Wi-Fi, main or guest network, and current up/down speed.
 
 The protocol (RSA-wrapped login, AES-CBC request bodies) follows the open-source Home
 Assistant integration at https://github.com/amosyuen/ha-tplink-deco. Standard library
-only, so AES and the RSA padding are implemented here. It is a small, slow AES meant for
-a few kilobytes every half minute, not for anything else.
+only, so AES and the RSA padding are implemented here. Where the `cryptography` package
+happens to be installed (it usually is on Raspberry Pi OS) its AES is used instead: a busy
+home's device list is tens of kilobytes, and decrypting that in pure Python every half
+minute is real work for a Pi.
 
 Try it by hand:  python3 deco.py http://192.168.68.1
 """
@@ -19,6 +21,11 @@ import ssl
 import urllib.error
 import urllib.parse
 import urllib.request
+
+try:  # optional, and only for speed: everything works without it
+    from cryptography.hazmat.primitives.ciphers import Cipher, algorithms, modes
+except ImportError:
+    Cipher = None
 
 
 class DecoError(Exception):
@@ -72,6 +79,9 @@ def _mul(a, b):
     return r
 
 
+M2, M3, M9, M11, M13, M14 = ([_mul(a, k) for a in range(256)] for k in (2, 3, 9, 11, 13, 14))
+
+
 def _round_keys(key):
     if len(key) != 16:
         raise ValueError("AES-128 needs a 16-byte key")
@@ -95,8 +105,8 @@ def _encrypt_block(block, keys):
             m = []
             for c in range(0, 16, 4):
                 a = s[c:c + 4]
-                m += [_mul(a[0], 2) ^ _mul(a[1], 3) ^ a[2] ^ a[3], a[0] ^ _mul(a[1], 2) ^ _mul(a[2], 3) ^ a[3],
-                      a[0] ^ a[1] ^ _mul(a[2], 2) ^ _mul(a[3], 3), _mul(a[0], 3) ^ a[1] ^ a[2] ^ _mul(a[3], 2)]
+                m += [M2[a[0]] ^ M3[a[1]] ^ a[2] ^ a[3], a[0] ^ M2[a[1]] ^ M3[a[2]] ^ a[3],
+                      a[0] ^ a[1] ^ M2[a[2]] ^ M3[a[3]], M3[a[0]] ^ a[1] ^ a[2] ^ M2[a[3]]]
             s = m
         s = [b ^ k for b, k in zip(s, keys[rnd])]
     return s
@@ -112,31 +122,44 @@ def _decrypt_block(block, keys):
             m = []
             for c in range(0, 16, 4):
                 a = s[c:c + 4]
-                m += [_mul(a[0], 14) ^ _mul(a[1], 11) ^ _mul(a[2], 13) ^ _mul(a[3], 9),
-                      _mul(a[0], 9) ^ _mul(a[1], 14) ^ _mul(a[2], 11) ^ _mul(a[3], 13),
-                      _mul(a[0], 13) ^ _mul(a[1], 9) ^ _mul(a[2], 14) ^ _mul(a[3], 11),
-                      _mul(a[0], 11) ^ _mul(a[1], 13) ^ _mul(a[2], 9) ^ _mul(a[3], 14)]
+                m += [M14[a[0]] ^ M11[a[1]] ^ M13[a[2]] ^ M9[a[3]], M9[a[0]] ^ M14[a[1]] ^ M11[a[2]] ^ M13[a[3]],
+                      M13[a[0]] ^ M9[a[1]] ^ M14[a[2]] ^ M11[a[3]], M11[a[0]] ^ M13[a[1]] ^ M9[a[2]] ^ M14[a[3]]]
             s = m
     return s
 
 
-def aes_cbc_encrypt(key, iv, data):
-    keys, pad = _round_keys(key), 16 - len(data) % 16
-    data, prev, out = data + bytes([pad]) * pad, list(iv), bytearray()
+def aes_cbc_encrypt(key, iv, data, fast=True):
+    pad = 16 - len(data) % 16
+    data = data + bytes([pad]) * pad
+    if Cipher and fast:
+        try:
+            c = Cipher(algorithms.AES(key), modes.CBC(iv)).encryptor()
+            return c.update(data) + c.finalize()
+        except Exception:  # an old or odd build of the library: the slow way always works
+            pass
+    keys, prev, out = _round_keys(key), list(iv), bytearray()
     for i in range(0, len(data), 16):
         prev = _encrypt_block([b ^ p for b, p in zip(data[i:i + 16], prev)], keys)
         out += bytes(prev)
     return bytes(out)
 
 
-def aes_cbc_decrypt(key, iv, data):
+def aes_cbc_decrypt(key, iv, data, fast=True):
     if not data or len(data) % 16:
         raise ValueError("ciphertext is not a whole number of blocks")
-    keys, prev, out = _round_keys(key), list(iv), bytearray()
-    for i in range(0, len(data), 16):
-        block = list(data[i:i + 16])
-        out += bytes(b ^ p for b, p in zip(_decrypt_block(block, keys), prev))
-        prev = block
+    out = None
+    if Cipher and fast:
+        try:
+            c = Cipher(algorithms.AES(key), modes.CBC(iv)).decryptor()
+            out = bytearray(c.update(data) + c.finalize())
+        except Exception:  # an old or odd build of the library: the slow way always works
+            out = None
+    if out is None:
+        keys, prev, out = _round_keys(key), list(iv), bytearray()
+        for i in range(0, len(data), 16):
+            block = list(data[i:i + 16])
+            out += bytes(b ^ p for b, p in zip(_decrypt_block(block, keys), prev))
+            prev = block
     pad = out[-1]
     if not 1 <= pad <= 16:
         raise ValueError("bad padding")
