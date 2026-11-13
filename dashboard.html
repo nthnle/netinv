@@ -621,27 +621,27 @@ function mapZoomable(svg, bar, base){
     if (!e.ctrlKey && !e.metaKey) return;
     e.preventDefault(); zoomBy(Math.exp(-e.deltaY * .01), at(e.clientX, e.clientY));
   }, {passive:false});
-  const down = new Map(); let moved = 0;
-  svg.addEventListener("pointerdown", e => { if (!down.size) moved = 0; down.set(e.pointerId, [e.clientX, e.clientY]); });
+  const down = new Map(); let start = null, dragging = false;
+  svg.addEventListener("pointerdown", e => { if (!down.size) { start = [e.clientX, e.clientY]; dragging = false; } down.set(e.pointerId, [e.clientX, e.clientY]); });
   svg.addEventListener("pointermove", e => {
     const was = down.get(e.pointerId);
     if (!was) return;
-    const pts = [...down.values()], r = svg.getBoundingClientRect();
-    if (pts.length === 1 && z.k > 1) {
-      moved += Math.abs(e.clientX - was[0]) + Math.abs(e.clientY - was[1]);
-      if (moved > 4) {
-        try { svg.setPointerCapture(e.pointerId); } catch (_) {}
-        z.cx -= (e.clientX - was[0]) / r.width * base.w / z.k; z.cy -= (e.clientY - was[1]) / r.height * base.h / z.k; apply();
-      } else return;   // not a drag yet: keep the starting point so the first real movement is not lost
-    } else if (pts.length === 2) {
+    if (e.pointerType === "mouse" && !e.buttons) { down.delete(e.pointerId); return; }   // the button was let go somewhere off the map
+    const r = svg.getBoundingClientRect();
+    if (down.size === 1 && z.k > 1) {
+      // a hand is never perfectly still during a click: only a real movement away from where it started is a drag
+      if (!dragging && Math.hypot(e.clientX - start[0], e.clientY - start[1]) < 6) return;
+      if (!dragging) { dragging = true; try { svg.setPointerCapture(e.pointerId); } catch (_) {} }
+      z.cx -= (e.clientX - was[0]) / r.width * base.w / z.k; z.cy -= (e.clientY - was[1]) / r.height * base.h / z.k; apply();
+    } else if (down.size === 2) {
       const other = [...down.entries()].find(([id]) => id !== e.pointerId)[1], dist = (a, b) => Math.hypot(a[0] - b[0], a[1] - b[1]) || 1;
-      moved = 9;
+      dragging = true;
       zoomBy(dist([e.clientX, e.clientY], other) / dist(was, other), at((e.clientX + other[0]) / 2, (e.clientY + other[1]) / 2));
     }
     down.set(e.pointerId, [e.clientX, e.clientY]);
   });
   for (const t of ["pointerup", "pointercancel"]) svg.addEventListener(t, e => down.delete(e.pointerId));
-  svg.addEventListener("click", e => { if (moved > 4) { e.stopPropagation(); e.preventDefault(); moved = 0; } }, true);   // the end of a drag is not a click on a device
+  svg.addEventListener("click", e => { if (dragging) { e.stopPropagation(); e.preventDefault(); dragging = false; } }, true);   // the end of a drag is not a click on a device
   apply();
 }
 
