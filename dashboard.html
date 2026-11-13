@@ -358,7 +358,7 @@ input[type=password]{flex:1 1 180px;max-width:360px}
     <p class="mute" id="loginsay">This dashboard is locked. Enter its password.</p>
     <div class="row"><input type="password" id="loginpw" autocomplete="current-password" placeholder="Password" aria-label="Dashboard password"><button class="act" id="loginbtn">Sign in</button></div>
     <p id="loginmsg" role="alert"></p>
-    <details id="loginhelp"><summary>Forgot the password?</summary><p class="mute" style="margin-top:8px">On the Pi, run this and then set a new one in Settings:</p><p class="mono">sudo -u netinv python3 /opt/netinv/netinv.py --reset-password</p></details>
+    <details id="loginhelp"><summary>Forgot the password?</summary><p class="mute" style="margin-top:8px">On the Pi, run this, then reload this page and choose a new one:</p><p class="mono">sudo -u netinv python3 /opt/netinv/netinv.py --reset-password</p></details>
   </form>
 </div>
 <div id="toast" role="status" aria-live="polite"></div>
@@ -1251,16 +1251,12 @@ async function loadSettings(){
   };
   // password
   const cur = el("input", {type:"password", autocomplete:"current-password"}), nw = el("input", {type:"password", autocomplete:"new-password"});
-  fill($("#set-pw"), st.has_password
-    ? [el("p", {class:"ok"}, "✓ This dashboard is locked with a password."),
+  fill($("#set-pw"), el("p", {class:"ok"}, "✓ This dashboard is locked with a password."),
        el("div", {class:"form"}, field("Current password", cur), field("New password (at least 8 characters)", nw),
          el("div", {class:"row", style:"margin:0"},
            el("button", {class:"act", onclick:() => act("/api/password", {current:cur.value, new:nw.value}, "Password changed")}, "Change password"),
-           el("button", {class:"ghost", onclick:async () => { await post("/api/logout", {}); showLogin(); }}, "Sign out")))]
-    : [el("p", {}, "Right now anyone on your Wi-Fi can open this page, see what every device does, and block sites. A password locks it."),
-       el("div", {class:"form"}, field("New password (at least 8 characters)", nw),
-         el("div", {}, el("button", {class:"act", onclick:() => act("/api/password", {new:nw.value}, "Password set")}, "Set password"))),
-       el("p", {class:"mute", style:"margin:10px 0 0;font-size:13.5px"}, "The page is served without encryption, so the password protects against casual access on your own network, not against someone capturing its traffic.")]);
+           el("button", {class:"ghost", onclick:async () => { await post("/api/logout", {}); showLogin(); }}, "Sign out"))),
+    el("p", {class:"mute", style:"margin:10px 0 0;font-size:13.5px"}, "The page is served without encryption, so the password protects against casual access on your own network, not against someone capturing its traffic."));
   // deco
   const dc = st.deco, host = el("input", {type:"text", value:dc.host || "", placeholder:"Address of the main Deco, e.g. 192.168.68.1"}), dpw = el("input", {type:"password", autocomplete:"off"});
   fill($("#set-deco"),

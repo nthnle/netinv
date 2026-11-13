@@ -377,6 +377,10 @@ def run(cmd, timeout=10):
         return ""
 
 
+class SignIn(Exception):
+    """Raised where the answer is "sign in first", with what to tell the person."""
+
+
 class App:
     def __init__(self, a):
         self.a = a
@@ -1319,6 +1323,7 @@ class App:
             # written in place, not renamed over: the systemd path unit watches this very file
             with open(path, "w", newline="\n") as f:
                 f.write(body)
+            os.chmod(path, 0o644)  # dnsmasq runs as another user and must read this, whatever netinv's own files default to
         except OSError as e:
             print("cannot write", path, e, flush=True)
             raise ValueError("Could not write the block list file.")
@@ -1480,27 +1485,41 @@ class App:
         salt, digest = stored.split(":")
         return hmac.compare_digest(self.pw_hash(str(password), bytes.fromhex(salt)), digest)
 
-    def login(self, password, who=""):
-        """Returns a session token, or raises with what to tell the person.
+    def guess(self, password, who, wrong="Wrong password."):
+        """Check a password someone typed, wherever it was typed (signing in, or "current password" when changing it).
+        The caller holds pw_lock: each check costs real memory and processor time on purpose, and a burst would stall the Pi.
         Wrong tries are counted per address, so a device guessing passwords locks itself out and nobody else.
         After five, each further wrong try doubles the wait: a minute, two, four, up to an hour."""
-        # one check at a time: each costs real memory and processor time on purpose, and a burst of them would stall the Pi
-        with self.pw_lock:
-            now = time.time()
-            fails = self.fails.setdefault(who, [0, 0])
-            if fails[1] > now:
-                raise ValueError(f"Too many wrong tries. Wait {int(fails[1] - now) + 1} seconds.")
-            if not self.pw_check(password):
-                fails[0] += 1
-                if fails[0] >= 5:
-                    fails[1] = now + min(3600, 60 * 2 ** (fails[0] - 5))
-                if len(self.fails) > 500:  # forget those whose wait is over, so this cannot grow without end
-                    self.fails = {k: v for k, v in self.fails.items() if v[1] > now}
-                raise ValueError("Wrong password.")
+        now = time.time()
+        fails = self.fails.setdefault(who, [0, 0, now])  # how many, locked until, last try
+        if fails[1] > now:
+            raise ValueError(f"Too many wrong tries. Wait {int(fails[1] - now) + 1} seconds.")
+        if self.pw_check(password):
             self.fails.pop(who, None)
+            return
+        fails[0], fails[2] = fails[0] + 1, now
+        if fails[0] >= 5:
+            fails[1] = now + min(3600, 60 * 2 ** (fails[0] - 5))
+        if len(self.fails) > 500:
+            # Keep this from growing without end, without handing out a clean slate: only those neither waiting
+            # nor heard from for two hours are forgotten, and beyond that the ones quiet longest.
+            keep = {k: v for k, v in self.fails.items() if v[1] > now or v[2] > now - 7200 or k == who}
+            for k in sorted(keep, key=lambda k: keep[k][2])[:max(0, len(keep) - 500)]:
+                if k != who:
+                    del keep[k]
+            self.fails = keep
+        raise ValueError(wrong)
+
+    def new_session(self):
         token = secrets.token_urlsafe(32)
-        self.x("INSERT INTO sessions VALUES(?,?)", (hashlib.sha256(token.encode()).hexdigest(), int(now) + SESSION_DAYS * 86400))
+        self.x("INSERT INTO sessions VALUES(?,?)", (hashlib.sha256(token.encode()).hexdigest(), int(time.time()) + SESSION_DAYS * 86400))
         return token
+
+    def login(self, password, who=""):
+        """Returns a session token, or raises with what to tell the person."""
+        with self.pw_lock:
+            self.guess(password, who)
+        return self.new_session()
 
     def session_ok(self, token):
         # No password yet means nobody is signed in: the dashboard offers to choose one and nothing else.
@@ -1509,20 +1528,26 @@ class App:
         return bool(self.q("SELECT 1 FROM sessions WHERE token=? AND expires>?",
                            (hashlib.sha256(token.encode()).hexdigest(), int(time.time()))))
 
-    def api_password(self, body):
+    def api_password(self, body, who="", signed_in=True):
+        """Choose the first password (allowed without signing in, once) or change it (needs the current one)."""
         new = str(body.get("new", ""))
-        if self.meta("pw_hash") and not self.pw_check(body.get("current", "")):
-            raise ValueError("The current password is not right.")
         if len(new) < 8:
             raise ValueError("Use at least 8 characters.")
-        salt = secrets.token_bytes(16)
-        self.meta("pw_hash", salt.hex() + ":" + self.pw_hash(new, salt))
-        self.x("DELETE FROM sessions")  # everyone signs in again, including this browser
-        return {"ok": True, "token": self.login(new)}
+        # Under the lock from the question "is there a password yet?" to writing one: of two browsers choosing
+        # the first password at the same moment, one wins and the other is asked to sign in.
+        with self.pw_lock:
+            if self.meta("pw_hash"):
+                if not signed_in:
+                    raise SignIn("A password has just been set from another browser. Sign in with it.")
+                self.guess(str(body.get("current", "")), who, "The current password is not right.")
+            salt = secrets.token_bytes(16)
+            self.meta("pw_hash", salt.hex() + ":" + self.pw_hash(new, salt))
+            self.x("DELETE FROM sessions")  # everyone signs in again, including this browser
+            return {"ok": True, "token": self.new_session()}
 
     def api_settings(self, p):
         host, password = self.deco_config()
-        return {"has_password": bool(self.meta("pw_hash")), "notify_url": self.meta("notify_url") or self.a.notify_url,
+        return {"notify_url": self.meta("notify_url") or self.a.notify_url,
                 "deco": {"available": deco is not None, "host": host, "configured": bool(host and password),
                          "halted": self.deco_halt, **{k: self.deco_state[k] for k in ("ok", "msg", "ts", "clients", "nodes")}}}
 
@@ -1536,18 +1561,23 @@ class App:
             return {"ok": True}
         if deco is None:
             raise ValueError("deco.py is missing next to netinv.py. Re-run install.sh.")
-        if not self.meta("pw_hash"):
-            raise ValueError("Set a dashboard password first. The Deco password is stored on the Pi and should not sit behind an open page.")
         if not password:
             raise ValueError("Enter the Deco owner password.")
-        if not re.fullmatch(r"(https?://)?[A-Za-z0-9.\-]+(:\d+)?/?", host):
+        m = re.fullmatch(r"(https?://)?([A-Za-z0-9.\-]+)(:\d+)?/?", host)
+        if not m:
             raise ValueError("That does not look like an address. Use something like 192.168.68.1")
-        try:  # a name is looked up, so one that points outside the home is refused like an outside address
-            found = {ipaddress.ip_address(i[4][0]) for i in socket.getaddrinfo(re.sub(r"^https?://|[:/].*$", "", host), None)}
+        # A name is looked up once, here, and the address it gave is what gets stored and used from then on.
+        # Keeping the name would mean trusting every later answer for it with the Deco password.
+        # A home name may also have a public IPv6 address; the Deco is reached at its private one, so only that matters.
+        try:
+            found = sorted({i[4][0] for i in socket.getaddrinfo(m.group(2), None, socket.AF_INET)})
         except (OSError, ValueError):
-            raise ValueError("Could not find that address. Use something like 192.168.68.1")
-        if not found or not all(ip.is_private for ip in found):
-            raise ValueError("The Deco address must be on your own network.")
+            found = []
+        home = [ip for ip in found if ipaddress.ip_address(ip).is_private]
+        if not home:
+            raise ValueError("The Deco address must be on your own network. Use its address there, something like 192.168.68.1"
+                             if found else "Could not find that address. Use something like 192.168.68.1")
+        host = (m.group(1) or "") + home[0] + (m.group(3) or "")
         trial = deco.Deco(host, password)
         try:
             found = trial.clients()  # prove it works before saving anything
@@ -1601,6 +1631,16 @@ class Handler(BaseHTTPRequestHandler):
         except ValueError:
             return h in self.server.allowed_hosts
 
+    def who(self):
+        """The address wrong passwords are counted against. Behind a proxy on the Pi itself every visitor arrives
+        from this machine, so there the proxy's word for who they are is taken. From anywhere else it is ignored."""
+        peer = self.client_address[0]
+        via = (self.headers.get("X-Forwarded-For") or "").split(",")[-1].strip()
+        try:
+            return str(ipaddress.ip_address(via)) if via and ipaddress.ip_address(peer).is_loopback else peer
+        except ValueError:
+            return peer
+
     def token(self):
         m = re.search(r"(?:^|;\s*)netinv=([A-Za-z0-9_\-]{20,80})", self.headers.get("Cookie") or "")
         return m.group(1) if m else ""
@@ -1638,11 +1678,11 @@ class Handler(BaseHTTPRequestHandler):
             return self.send(200, ICON.encode(), "image/svg+xml")
         if u.path == "/manifest.json":
             return self.send(200, MANIFEST, "application/manifest+json")
-        authed, setup = app.session_ok(self.token()), not app.meta("pw_hash")
+        authed = app.session_ok(self.token())
         if u.path == "/api/session":
-            return self.send(200, {"needs_password": True, "setup": setup, "signed_in": authed})
+            return self.send(200, {"setup": not app.meta("pw_hash"), "signed_in": authed})
         if not authed:
-            return self.send(401, {"error": "sign in", "setup": setup})
+            return self.send(401, {"error": "sign in", "setup": not app.meta("pw_hash")})
         if u.path == "/api/devices.csv":
             return self.send(200, app.devices_csv(), "text/csv; charset=utf-8", "netinv-devices.csv")
         fn = {"/api/summary": app.api_summary, "/api/devices": app.api_devices, "/api/device": app.api_device,
@@ -1675,18 +1715,15 @@ class Handler(BaseHTTPRequestHandler):
             return self.send(400, {"error": "bad request"})
         try:
             if self.path == "/api/login":
-                return self.send(200, {"ok": True}, token=app.login(str(body.get("password", "")), self.client_address[0]))
-            setup = not app.meta("pw_hash")
-            if setup and self.path == "/api/password":  # first use: choosing the password is the one thing allowed
-                return self.send(200, {"ok": True}, token=app.api_password(body).get("token", ""))
-            if not app.session_ok(self.token()):
-                return self.send(401, {"error": "sign in", "setup": setup})
+                return self.send(200, {"ok": True}, token=app.login(str(body.get("password", "")), self.who()))
+            authed = app.session_ok(self.token())
+            if self.path == "/api/password":  # choosing the first password is the one thing allowed without signing in
+                return self.send(200, {"ok": True}, token=app.api_password(body, self.who(), authed)["token"])
+            if not authed:
+                return self.send(401, {"error": "sign in", "setup": not app.meta("pw_hash")})
             if self.path == "/api/logout":
                 app.x("DELETE FROM sessions WHERE token=?", (hashlib.sha256(self.token().encode()).hexdigest(),))
                 return self.send(200, {"ok": True}, token="")
-            if self.path == "/api/password":
-                out = app.api_password(body)
-                return self.send(200, {"ok": True}, token=out.get("token", ""))
             fn = {"/api/device": app.api_update, "/api/block": app.api_block, "/api/dismiss": app.api_dismiss,
                   "/api/forget": app.api_forget, "/api/allow": app.api_allow, "/api/list": app.api_list,
                   "/api/ports": app.api_ports, "/api/speedtest": app.api_speedtest,
@@ -1694,6 +1731,8 @@ class Handler(BaseHTTPRequestHandler):
             if not fn:
                 return self.send(404, {"error": "not found"})
             self.send(200, fn(body))
+        except SignIn as e:
+            self.send(401, {"error": str(e), "setup": False})
         except ValueError as e:  # raised with a message meant for the person at the dashboard
             self.send(400, {"error": str(e) or "bad request"})
         except (AttributeError, TypeError, sqlite3.Error):
@@ -1726,7 +1765,8 @@ def main():
     if a.reset_password:
         app.x("DELETE FROM meta WHERE k IN ('pw_hash','deco_host','deco_password')")
         app.x("DELETE FROM sessions")
-        print("Dashboard password removed. The Deco connection was removed with it; set both again from Settings.")
+        print("Dashboard password removed, and the Deco connection with it. Open the dashboard to choose a new password, "
+              "then connect the Deco again in Settings.")
         return
     for job in (app.scanner, app.tailer, app.monitor, app.deco_loop):
         threading.Thread(target=job, daemon=True).start()

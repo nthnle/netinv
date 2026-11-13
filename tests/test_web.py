@@ -59,7 +59,7 @@ class Web(unittest.TestCase):
 
 class FirstUse(Web):
     def test_nothing_is_shown_until_a_password_is_chosen(self):
-        self.assertEqual(self.call("GET", "/api/session")[1], {"needs_password": True, "setup": True, "signed_in": False})
+        self.assertEqual(self.call("GET", "/api/session")[1], {"setup": True, "signed_in": False})
         for path in ("/api/devices", "/api/summary", "/api/devices.csv", "/api/settings"):
             self.assertEqual(self.call("GET", path), (401, {"error": "sign in", "setup": True}), path)
         self.assertEqual(self.call("POST", "/api/block", {"domain": "example.com"})[0], 401)
@@ -80,6 +80,16 @@ class FirstUse(Web):
         self.assertEqual(self.call("POST", "/api/password", {"current": "wrong", "new": "another one!"})[0], 400)
         self.assertEqual(self.call("POST", "/api/password", {"current": PASSWORD, "new": ""})[0], 400)
         self.assertEqual(self.call("POST", "/api/password", {"current": PASSWORD, "new": "another one!"})[0], 200)
+
+
+class FirstUseRace(Web):
+    def test_of_two_browsers_choosing_at_once_one_wins_and_the_other_is_told_to_sign_in(self):
+        self.set_password()
+        self.cookie = ""
+        status, body = self.call("POST", "/api/password", {"new": "the other browser's"})   # still on the first-use screen
+        self.assertEqual((status, body["setup"]), (401, False))
+        self.assertIn("Sign in", body["error"])
+        self.assertTrue(self.app.login(PASSWORD, "x"))                                      # the first choice stands
 
 
 class SignIn(Web):
@@ -106,6 +116,48 @@ class SignIn(Web):
         self.assertNotIn("a", self.app.fails)
 
 
+    def test_guessing_through_change_password_counts_too(self):
+        self.app.login(PASSWORD, "a")
+        for _ in range(5):
+            with self.assertRaisesRegex(ValueError, "current password is not right"):
+                self.app.api_password({"current": "guess", "new": "something else"}, "a")
+        with self.assertRaisesRegex(ValueError, "Too many wrong tries"):
+            self.app.api_password({"current": PASSWORD, "new": "something else"}, "a")
+        with self.assertRaisesRegex(ValueError, "Too many wrong tries"):
+            self.app.login(PASSWORD, "a")                                                   # one count for both doors
+
+    def test_a_flood_of_addresses_does_not_wipe_anyone_s_count(self):
+        for _ in range(4):
+            with self.assertRaises(ValueError):
+                self.app.login("guess", "careful")                                          # one try short of a lockout
+        now = time.time()
+        self.app.fails.update({f"flood{i}": [1, 0, now - 9000] for i in range(600)})        # long quiet: may be forgotten
+        with self.assertRaises(ValueError):
+            self.app.login("guess", "other")
+        self.assertLessEqual(len(self.app.fails), 500)
+        self.assertEqual(self.app.fails["careful"][0], 4)
+        with self.assertRaises(ValueError):
+            self.app.login("guess", "careful")
+        self.assertGreater(self.app.fails["careful"][1], now)                               # the fifth still locks
+
+    def test_behind_a_proxy_on_the_pi_each_visitor_is_counted_separately(self):
+        via = lambda ip: {"X-Forwarded-For": ip}
+        for _ in range(5):
+            self.call("POST", "/api/login", {"password": "guess"}, via("192.168.68.50"))
+        self.assertIn("Too many", self.call("POST", "/api/login", {"password": PASSWORD}, via("192.168.68.50"))[1]["error"])
+        self.assertEqual(self.call("POST", "/api/login", {"password": PASSWORD}, via("192.168.68.51"))[0], 200)
+
+    def test_only_a_proxy_on_the_pi_is_believed_about_who_is_calling(self):
+        h = netinv.Handler.__new__(netinv.Handler)
+        h.headers = {"X-Forwarded-For": "10.9.9.9"}
+        h.client_address = ("192.168.68.77", 1234)
+        self.assertEqual(h.who(), "192.168.68.77")           # a device claiming to be someone else is not believed
+        h.client_address = ("127.0.0.1", 1234)
+        self.assertEqual(h.who(), "10.9.9.9")
+        h.headers = {"X-Forwarded-For": "not an address"}
+        self.assertEqual(h.who(), "127.0.0.1")
+
+
 class Hostile(Web):
     def raw(self, request, wait=5):
         s = socket.create_connection(("127.0.0.1", self.port))
@@ -120,7 +172,7 @@ class Hostile(Web):
     def test_a_request_cannot_make_the_server_read_without_limit(self):
         head = "POST /api/login HTTP/1.1\r\nHost: 127.0.0.1\r\nContent-Type: application/json\r\nContent-Length: %s\r\n\r\n"
         for length in ("-1", "5000", "99999999999", "many"):
-            self.assertIn("400", self.raw((head % length).encode() + b"x" * 100), length)
+            self.assertIn("400", self.raw((head % length).encode()), length)
 
     def test_a_silent_connection_is_dropped(self):
         self.assertIsNotNone(netinv.Handler.timeout)
@@ -144,11 +196,34 @@ class Hostile(Web):
 
     def test_the_deco_address_must_be_in_the_home_however_it_is_written(self):
         self.set_password()
-        outside = [(socket.AF_INET, socket.SOCK_STREAM, 6, "", ("93.184.216.34", 0))]   # a name that points out of the house
-        with mock.patch("netinv.socket.getaddrinfo", lambda host, *a, **k: outside if host == "deco.example" else real_lookup(host, *a, **k)):
+        answers = {"deco.example": ["93.184.216.34"], "deco.lan": ["93.184.216.34", "192.168.68.1"]}
+        lookup = lambda host, *a, **k: ([(socket.AF_INET, socket.SOCK_STREAM, 6, "", (ip, 0)) for ip in answers[host]]
+                                        if host in answers else real_lookup(host, *a, **k))
+
+        class FakeDeco:
+            def __init__(self, host, password):
+                self.host, self.password = host, password
+
+            def clients(self):
+                return []
+        with mock.patch("netinv.socket.getaddrinfo", lookup), mock.patch("netinv.deco.Deco", FakeDeco):
             for host in ("8.8.8.8", "http://1.1.1.1", "deco.example"):
                 status, body = self.call("POST", "/api/settings/deco", {"host": host, "password": "x"})
-                self.assertEqual((status, body["error"]), (400, "The Deco address must be on your own network."), host)
+                self.assertEqual(status, 400, host)
+                self.assertIn("must be on your own network", body["error"], host)
+            # a home name that also has an outside address is accepted, at its home address, and that address
+            # is what is kept: the name is never looked up again with the Deco password in hand
+            self.assertEqual(self.call("POST", "/api/settings/deco", {"host": "https://deco.lan:8443/", "password": "x"})[0], 200)
+            self.assertEqual(self.app.meta("deco_host"), "https://192.168.68.1:8443")
+
+    @unittest.skipIf(os.name == "nt", "file modes are a Unix matter")
+    def test_a_block_file_netinv_has_to_recreate_stays_readable_by_dnsmasq(self):
+        old = os.umask(0o077)   # as the service runs
+        self.addCleanup(os.umask, old)
+        self.set_password()
+        os.remove(self.app.a.block_file) if os.path.exists(self.app.a.block_file) else None
+        self.call("POST", "/api/block", {"domain": "example.com"})
+        self.assertEqual(os.stat(self.app.a.block_file).st_mode & 0o777, 0o644)
 
     def test_a_name_cannot_run_as_a_spreadsheet_formula(self):
         for i, label in enumerate(("=HYPERLINK(1)", "+1", "-1", "@x", "\t=1", "\r=1")):
