@@ -449,7 +449,7 @@ const ICONS = {
   unknown:'<circle cx="10" cy="10" r="8"/><path d="M7.8 8a2.2 2.2 0 1 1 3.3 1.9c-.7.4-1.1.9-1.1 1.7M10 14.4h.01"/>',
 };
 const KINDS = [
-  ["router", /router|gateway|access point|mesh|netgear|eero|unifi|ubiquiti|orbi/],
+  ["router", /router|gateway|access point|mesh|\bdeco\b|netgear|eero|unifi|ubiquiti|orbi/],
   ["tv", /\btv\b|television|roku|chromecast|fire ?stick/],
   ["console", /xbox|playstation|\bps[45]\b|nintendo|console/],
   ["camera", /camera|\bcam\b|doorbell|\bring\b|wyze|arlo|eufy/],
@@ -462,6 +462,7 @@ const KINDS = [
 ];
 function kindOf(d){
   const pick = t => { t = t.toLowerCase(); const k = KINDS.find(([, re]) => re.test(t)); return k && k[0]; };
+  if (d.infra === "mesh" || d.infra === "router") return "router";
   const named = pick([d.label, d.deco_name, d.mdns, d.hostname].join(" "));
   if (named) return named;
   if (/^(Apple device|Android)/.test(d.hint || "")) return "phone";   // the guess lists several things; a phone is the likeliest

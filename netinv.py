@@ -908,7 +908,15 @@ class App:
                          1 known, 0 randomized, MIN(hour) first_seen, MAX(hour) last_seen, 0 online
                          FROM dns_hourly WHERE dev LIKE 'ip:%' GROUP BY dev""")
         hints, doing, sparks = self.hints(), self.day_activity()[0], self.sparks()
-        mesh = {n["ip"] for n in self.deco_state["nodes"] if n.get("ip")}
+        # A mesh unit shows up on the network under several faces: its own address, a neighbouring
+        # hardware address (each radio and port has one, a digit apart), or simply the name "Deco".
+        nodes = self.deco_state["nodes"]
+        mesh_ips = {n["ip"] for n in nodes if n.get("ip")}
+        mesh_macs = {n["mac"][:14] for n in nodes if len(n.get("mac") or "") == 17}
+
+        def is_mesh(r):
+            name = r.get("deco_name") or r.get("mdns") or r.get("hostname") or ""
+            return bool(r["ip"] in mesh_ips or r["mac"][:14] in mesh_macs or re.match(r"deco\b", name, re.I))
         for r in out:
             mac = r["mac"]
             r.pop("host_checked", None)
@@ -918,7 +926,7 @@ class App:
             r["hint"] = service_hint(r.get("services") or "") or hints.get(mac, "")
             # the router, the mesh units and this Pi do not ask netinv for addresses, so silence from them is normal
             r["infra"] = ("router" if self.a.gateway and r["ip"] == self.a.gateway else "pi" if r["vendor"] == PI_VENDOR
-                          else "mesh" if r["ip"] in mesh else "")
+                          else "mesh" if is_mesh(r) else "")
             r["mostly"] = mostly(cats)
             r["hidden"] = int(any(c["cat"] == HIDDEN for c in cats))
             fam = self.family(mac)
