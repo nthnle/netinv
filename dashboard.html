@@ -96,7 +96,12 @@ tbody tr.click:focus-visible{outline-offset:-2px}
 .spark.flat .ln{stroke:var(--line)}
 .cnt{color:var(--mute);font-size:12px}
 /* network map */
-.map{display:grid;place-items:center;padding:4px 0 8px}
+.map{display:grid;place-items:center;padding:4px 0 8px;position:relative}
+.map svg.zoomed{cursor:grab;touch-action:none}
+.map svg.zoomed:active{cursor:grabbing}
+.mapzoom{position:absolute;top:6px;right:0;z-index:1;display:flex;gap:4px}
+.mapzoom button.ghost{min-width:32px;padding:4px 9px;background:var(--card)}
+.mapzoom button.ghost:disabled{opacity:.4;cursor:default}
 .map svg{width:100%;height:auto;display:block}
 .map .link{stroke:var(--line);stroke-width:1.5}
 .map .link.trunk{stroke-width:2.5}
@@ -580,10 +585,64 @@ function renderMap(list){
   const focused = document.activeElement && document.activeElement.dataset ? document.activeElement.dataset.mac : null;
   const hint = !list.length ? "No devices match."
     : (meshed ? "Each cluster is a Deco unit and the devices connected through it, usually the nearest one. " : "") + "Bigger circles and brighter lines mean more activity. Orange rings are new devices. Click one to open it.";
-  fill($("#map"),
-    svgEl("svg", {viewBox:`${x0.toFixed(0)} ${y0.toFixed(0)} ${(x1 - x0).toFixed(0)} ${(y1 - y0).toFixed(0)}`, style:`max-width:${Math.round((x1 - x0) * 1.35)}px`, role:"group", "aria-label":"Map of devices on your network"}, links, marks, hubs),
-    el("p", {class:"maphint"}, hint));
+  const svg = svgEl("svg", {style:`max-width:${Math.round((x1 - x0) * 1.35)}px`, role:"group", "aria-label":"Map of devices on your network"}, links, marks, hubs);
+  const zoom = list.length ? el("div", {class:"mapzoom", role:"group", "aria-label":"Zoom"}) : null;
+  fill($("#map"), zoom, svg, el("p", {class:"maphint"}, hint + (list.length ? " Zoom with + and − (or Ctrl and the scroll wheel), then drag to move around." : "")));
+  mapZoomable(svg, zoom, {x:x0, y:y0, w:x1 - x0, h:y1 - y0});
   if (focused) { const n = $("#map").querySelector(`[data-mac="${CSS.escape(focused)}"]`); if (n) n.focus(); }
+}
+
+// Zoom and pan, by moving the viewBox. The zoom level and position outlive redraws, which happen on every refresh and click.
+let mapZoom = {k:1, cx:0, cy:0};
+function mapZoomable(svg, bar, base){
+  const z = mapZoom, MAX = 6, btn = {};
+  const apply = () => {
+    const w = base.w / z.k, h = base.h / z.k;
+    z.cx = Math.min(base.x + base.w - w / 2, Math.max(base.x + w / 2, z.cx));
+    z.cy = Math.min(base.y + base.h - h / 2, Math.max(base.y + h / 2, z.cy));
+    svg.setAttribute("viewBox", `${(z.cx - w / 2).toFixed(1)} ${(z.cy - h / 2).toFixed(1)} ${w.toFixed(1)} ${h.toFixed(1)}`);
+    svg.classList.toggle("zoomed", z.k > 1);
+    if (btn.out) { btn.out.disabled = z.k <= 1; btn.in.disabled = z.k >= MAX; btn.reset.hidden = z.k <= 1; }
+  };
+  // where on the map a point of the screen is
+  const at = (x, y) => { const r = svg.getBoundingClientRect(), w = base.w / z.k, h = base.h / z.k; return [z.cx - w / 2 + (x - r.left) / r.width * w, z.cy - h / 2 + (y - r.top) / r.height * h]; };
+  const zoomBy = (f, p) => {   // keeps the point p of the map where it is on screen
+    const k = Math.min(MAX, Math.max(1, z.k * f));
+    if (p) { z.cx = p[0] + (z.cx - p[0]) * z.k / k; z.cy = p[1] + (z.cy - p[1]) * z.k / k; }
+    z.k = k; apply();
+  };
+  if (bar) {
+    btn.in = el("button", {class:"ghost", title:"Zoom in", "aria-label":"Zoom in", onclick:() => zoomBy(1.5)}, "+");
+    btn.out = el("button", {class:"ghost", title:"Zoom out", "aria-label":"Zoom out", onclick:() => zoomBy(1 / 1.5)}, "−");
+    btn.reset = el("button", {class:"ghost", title:"Show the whole map", onclick:() => zoomBy(0)}, "Reset");
+    fill(bar, btn.in, btn.out, btn.reset);
+  }
+  svg.addEventListener("wheel", e => {   // plain scrolling still scrolls the page; a trackpad pinch arrives as Ctrl + wheel
+    if (!e.ctrlKey && !e.metaKey) return;
+    e.preventDefault(); zoomBy(Math.exp(-e.deltaY * .01), at(e.clientX, e.clientY));
+  }, {passive:false});
+  const down = new Map(); let moved = 0;
+  svg.addEventListener("pointerdown", e => { if (!down.size) moved = 0; down.set(e.pointerId, [e.clientX, e.clientY]); });
+  svg.addEventListener("pointermove", e => {
+    const was = down.get(e.pointerId);
+    if (!was) return;
+    const pts = [...down.values()], r = svg.getBoundingClientRect();
+    if (pts.length === 1 && z.k > 1) {
+      moved += Math.abs(e.clientX - was[0]) + Math.abs(e.clientY - was[1]);
+      if (moved > 4) {
+        try { svg.setPointerCapture(e.pointerId); } catch (_) {}
+        z.cx -= (e.clientX - was[0]) / r.width * base.w / z.k; z.cy -= (e.clientY - was[1]) / r.height * base.h / z.k; apply();
+      } else return;   // not a drag yet: keep the starting point so the first real movement is not lost
+    } else if (pts.length === 2) {
+      const other = [...down.entries()].find(([id]) => id !== e.pointerId)[1], dist = (a, b) => Math.hypot(a[0] - b[0], a[1] - b[1]) || 1;
+      moved = 9;
+      zoomBy(dist([e.clientX, e.clientY], other) / dist(was, other), at((e.clientX + other[0]) / 2, (e.clientY + other[1]) / 2));
+    }
+    down.set(e.pointerId, [e.clientX, e.clientY]);
+  });
+  for (const t of ["pointerup", "pointercancel"]) svg.addEventListener(t, e => down.delete(e.pointerId));
+  svg.addEventListener("click", e => { if (moved > 4) { e.stopPropagation(); e.preventDefault(); moved = 0; } }, true);   // the end of a drag is not a click on a device
+  apply();
 }
 
 // ---- activity --------------------------------------------------------------
