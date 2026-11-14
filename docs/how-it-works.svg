@@ -1,0 +1,106 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 700" role="img" aria-labelledby="t d" font-family="system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif">
+  <title id="t">How lanledger works</title>
+  <desc id="d">Devices ask the Raspberry Pi for site addresses. dnsmasq on the Pi forwards each question to an upstream DNS server and answers, or refuses if the site is blocked. lanledger reads dnsmasq's log of who asked for what, sweeps the network every minute to find devices, keeps everything in one SQLite file, writes the block files dnsmasq reads, and serves the dashboard. The traffic itself goes from devices straight to the router and never passes through the Pi.</desc>
+  <defs>
+    <marker id="a" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0L10 5L0 10z" fill="#62d0f5"/></marker>
+    <marker id="m" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0L10 5L0 10z" fill="#a3aec4"/></marker>
+    <marker id="w" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0L10 5L0 10z" fill="#f5b544"/></marker>
+  </defs>
+  <rect width="1200" height="700" rx="18" fill="#0a0f1d"/>
+
+  <!-- the traffic itself: around the Pi, not through it -->
+  <path d="M145 150V52H978" fill="none" stroke="#a3aec4" stroke-width="1.5" stroke-dasharray="6 6" marker-end="url(#m)"/>
+  <text x="560" y="40" fill="#a3aec4" font-size="13.5" text-anchor="middle">The traffic itself goes straight out. The Pi never sees pages, messages or passwords.</text>
+  <rect x="980" y="20" width="190" height="64" rx="12" fill="#131a2c" stroke="#2a3552"/>
+  <text x="1075" y="48" fill="#eef2f9" font-size="15" font-weight="600" text-anchor="middle">Router</text>
+  <text x="1075" y="68" fill="#a3aec4" font-size="13" text-anchor="middle">and the internet</text>
+
+  <!-- devices -->
+  <rect x="40" y="150" width="210" height="210" rx="14" fill="#131a2c" stroke="#2a3552"/>
+  <text x="145" y="182" fill="#eef2f9" font-size="16" font-weight="600" text-anchor="middle">Devices on your network</text>
+  <g fill="none" stroke="#62d0f5" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+    <rect x="72" y="212" width="26" height="46" rx="4"/><path d="M82 250h6"/>
+    <rect x="118" y="216" width="60" height="38" rx="3"/><path d="M134 262h28"/>
+    <rect x="198" y="218" width="24" height="40" rx="3"/><circle cx="210" cy="244" r="6"/><path d="M210 228h.01"/>
+  </g>
+  <text x="145" y="296" fill="#a3aec4" font-size="13" text-anchor="middle">phones, TVs, laptops,</text>
+  <text x="145" y="314" fill="#a3aec4" font-size="13" text-anchor="middle">gadgets</text>
+
+  <!-- the Pi -->
+  <rect x="430" y="100" width="460" height="470" rx="18" fill="#0f1526" stroke="#62d0f5" stroke-width="1.5"/>
+  <text x="460" y="134" fill="#62d0f5" font-size="16" font-weight="600">Raspberry Pi</text>
+
+  <rect x="460" y="150" width="400" height="84" rx="12" fill="#1c2540" stroke="#2a3552"/>
+  <text x="660" y="186" fill="#eef2f9" font-size="16" font-weight="600" text-anchor="middle">dnsmasq</text>
+  <text x="660" y="210" fill="#a3aec4" font-size="13.5" text-anchor="middle">your network's DNS server</text>
+
+  <rect x="460" y="312" width="400" height="92" rx="12" fill="#1c2540" stroke="#2a3552"/>
+  <text x="660" y="350" fill="#eef2f9" font-size="16" font-weight="600" text-anchor="middle">lanledger.py</text>
+  <text x="660" y="376" fill="#a3aec4" font-size="13.5" text-anchor="middle">one Python program, no extra dependencies</text>
+
+  <rect x="460" y="466" width="185" height="76" rx="12" fill="#1c2540" stroke="#2a3552"/>
+  <text x="552" y="499" fill="#eef2f9" font-size="15" font-weight="600" text-anchor="middle">lanledger.db</text>
+  <text x="552" y="521" fill="#a3aec4" font-size="13" text-anchor="middle">one SQLite file</text>
+
+  <rect x="675" y="466" width="185" height="76" rx="12" fill="#1c2540" stroke="#2a3552"/>
+  <text x="767" y="499" fill="#eef2f9" font-size="15" font-weight="600" text-anchor="middle">Dashboard</text>
+  <text x="767" y="521" fill="#a3aec4" font-size="13" text-anchor="middle">port 8080</text>
+
+  <!-- 1, 2, 3: a lookup -->
+  <path d="M250 178H458" fill="none" stroke="#62d0f5" stroke-width="2" marker-end="url(#a)"/>
+  <text x="354" y="168" fill="#eef2f9" font-size="13.5" text-anchor="middle"><tspan fill="#62d0f5" font-weight="700">1</tspan>  “Where is netflix.com?”</text>
+  <path d="M860 178H978" fill="none" stroke="#62d0f5" stroke-width="2" marker-start="url(#a)" marker-end="url(#a)"/>
+  <text x="920" y="168" fill="#eef2f9" font-size="13.5" text-anchor="middle"><tspan fill="#62d0f5" font-weight="700">2</tspan>  asks on</text>
+  <path d="M458 210H252" fill="none" stroke="#62d0f5" stroke-width="2" marker-end="url(#a)"/>
+  <text x="354" y="230" fill="#eef2f9" font-size="13.5" text-anchor="middle"><tspan fill="#62d0f5" font-weight="700">3</tspan>  the address,</text>
+  <text x="354" y="248" fill="#f5b544" font-size="13.5" text-anchor="middle">or a refusal if blocked</text>
+
+  <rect x="980" y="150" width="190" height="84" rx="12" fill="#131a2c" stroke="#2a3552"/>
+  <text x="1075" y="186" fill="#eef2f9" font-size="15" font-weight="600" text-anchor="middle">Upstream DNS</text>
+  <text x="1075" y="208" fill="#a3aec4" font-size="13" text-anchor="middle">1.1.1.1 and 9.9.9.9</text>
+
+  <!-- dnsmasq <-> lanledger -->
+  <path d="M560 234V310" fill="none" stroke="#62d0f5" stroke-width="2" marker-end="url(#a)"/>
+  <text x="548" y="266" fill="#eef2f9" font-size="13" text-anchor="end">log of lookups:</text>
+  <text x="548" y="284" fill="#a3aec4" font-size="13" text-anchor="end">who asked for what</text>
+  <path d="M760 312V236" fill="none" stroke="#f5b544" stroke-width="2" marker-end="url(#w)"/>
+  <text x="772" y="266" fill="#eef2f9" font-size="13">block files:</text>
+  <text x="772" y="284" fill="#a3aec4" font-size="13">what to refuse</text>
+
+  <!-- the sweep -->
+  <path d="M458 340H252" fill="none" stroke="#62d0f5" stroke-width="2" marker-end="url(#a)"/>
+  <text x="354" y="330" fill="#eef2f9" font-size="13.5" text-anchor="middle">sweeps every minute</text>
+  <text x="354" y="360" fill="#a3aec4" font-size="13" text-anchor="middle">to find every device</text>
+
+  <!-- lanledger -> db, dashboard -->
+  <path d="M552 404V464" fill="none" stroke="#62d0f5" stroke-width="2" marker-start="url(#a)" marker-end="url(#a)"/>
+  <text x="540" y="440" fill="#a3aec4" font-size="13" text-anchor="end">devices, hourly</text>
+  <text x="540" y="456" fill="#a3aec4" font-size="13" text-anchor="end">counts, blocks</text>
+  <path d="M767 404V464" fill="none" stroke="#62d0f5" stroke-width="2" marker-end="url(#a)"/>
+  <text x="779" y="440" fill="#a3aec4" font-size="13">serves</text>
+
+  <!-- browser -->
+  <path d="M767 542V618" fill="none" stroke="#62d0f5" stroke-width="2" marker-start="url(#a)"/>
+  <rect x="640" y="620" width="254" height="60" rx="12" fill="#131a2c" stroke="#2a3552"/>
+  <text x="767" y="646" fill="#eef2f9" font-size="15" font-weight="600" text-anchor="middle">Your browser</text>
+  <text x="767" y="666" fill="#a3aec4" font-size="13" text-anchor="middle">see devices and activity, block sites</text>
+
+  <!-- optional: alerts and Deco -->
+  <path d="M860 340H978" fill="none" stroke="#62d0f5" stroke-width="2" stroke-dasharray="6 5" marker-end="url(#a)"/>
+  <rect x="980" y="300" width="190" height="84" rx="12" fill="#131a2c" stroke="#2a3552" stroke-dasharray="6 5"/>
+  <text x="1075" y="330" fill="#eef2f9" font-size="15" font-weight="600" text-anchor="middle">Alerts to your phone</text>
+  <text x="1075" y="351" fill="#a3aec4" font-size="13" text-anchor="middle">new device, security</text>
+  <text x="1075" y="369" fill="#a3aec4" font-size="13" text-anchor="middle">warning, outage over</text>
+
+  <path d="M978 500H925V382H862" fill="none" stroke="#62d0f5" stroke-width="2" stroke-dasharray="6 5" marker-end="url(#a)"/>
+  <rect x="980" y="458" width="190" height="84" rx="12" fill="#131a2c" stroke="#2a3552" stroke-dasharray="6 5"/>
+  <text x="1075" y="488" fill="#eef2f9" font-size="15" font-weight="600" text-anchor="middle">TP-Link Deco</text>
+  <text x="1075" y="509" fill="#a3aec4" font-size="13" text-anchor="middle">names, Wi-Fi or wired,</text>
+  <text x="1075" y="527" fill="#a3aec4" font-size="13" text-anchor="middle">data used. Read only.</text>
+
+  <!-- key -->
+  <path d="M40 646H84" fill="none" stroke="#62d0f5" stroke-width="2" stroke-dasharray="6 5"/>
+  <text x="94" y="650" fill="#a3aec4" font-size="13">optional</text>
+  <path d="M40 670H84" fill="none" stroke="#a3aec4" stroke-width="1.5" stroke-dasharray="6 6"/>
+  <text x="94" y="674" fill="#a3aec4" font-size="13">not seen by lanledger</text>
+</svg>

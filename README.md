@@ -51,6 +51,8 @@ It is one Python program with no dependencies beyond what Raspberry Pi OS ships,
 
 The Pi becomes your network's DNS server (using dnsmasq). Before any device can reach a site it has to ask for that site's address, so the Pi sees which device asked for what, and can refuse to answer for anything you block. Separately, lanledger sweeps the network every minute to find devices. That is all it relies on: it does not sit in the path of your traffic, and it cannot read pages, messages or passwords.
 
+![How lanledger works: devices ask the Pi for addresses, dnsmasq answers or refuses, and lanledger reads the log, sweeps the network, stores everything in one file and serves the dashboard](docs/how-it-works.svg)
+
 ## What you need
 
 - A Raspberry Pi (any model with networking) running Raspberry Pi OS or Debian, connected to your network, preferably by cable.
