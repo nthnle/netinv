@@ -1024,7 +1024,7 @@ function renderDevices(){
         el("div", {class:"nm"}, name, d.known ? null : el("span", {class:"tag new"}, "new"),
           d.net === "guest" ? el("span", {class:"tag", title:"Connected to your guest Wi-Fi"}, "guest") : null),
         el("div", {class:"sub"}, sub)))),
-      el("td", {class: d.mostly ? "" : "mute"}, d.mostly || (d.private ? "Not recorded" : d.isolated ? "Isolated from the Pi" : isSilent(d) ? "Nothing visible" : d.infra ? "Runs the network" : "–"),
+      el("td", {class: d.mostly && !d.infra ? "" : "mute"}, d.infra ? "Runs the network" : d.mostly || (d.private ? "Not recorded" : d.isolated ? "Isolated from the Pi" : isSilent(d) ? "Nothing visible" : "–"),
         d.hidden ? el("span", {class:"tag", title:"Uses a VPN, iCloud Private Relay or private DNS: part of what it does is not visible"}, "partly hidden") : null),
       el("td", {class:"num hide-s", title:sparkTip(d.spark)}, spark(d.spark, 84, 22), el("div", {class:"cnt"}, fmt(d.queries)),
         d.down > 2000 || d.up > 2000 ? el("div", {class:"cnt rate", title:"Speed right now, from the Deco"}, `↓ ${fmtRate(d.down)}`) : null),

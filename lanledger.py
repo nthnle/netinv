@@ -1196,8 +1196,8 @@ class App:
         mesh_macs = {n["mac"][:14] for n in nodes if len(n.get("mac") or "") == 17}
 
         def is_mesh(r):
-            name = r.get("deco_name") or r.get("mdns") or r.get("hostname") or ""
-            return bool(r["ip"] in mesh_ips or r["mac"][:14] in mesh_macs or re.match(r"deco\b", name, re.I))
+            names = [r.get(k) or "" for k in ("label", "deco_name", "mdns", "hostname")]   # label: you named it so yourself
+            return bool(r["ip"] in mesh_ips or r["mac"][:14] in mesh_macs or any(re.match(r"deco\b", n, re.I) for n in names))
         for r in out:
             mac = r["mac"]
             r.pop("host_checked", None)
