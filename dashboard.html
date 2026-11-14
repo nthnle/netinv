@@ -48,6 +48,15 @@ main{padding:16px 20px 48px;max-width:1280px;margin:0 auto}
 .tile .spark{position:absolute;right:12px;top:16px}
 .tile span{color:var(--mute);font-size:13px}
 .tile.alert b{color:var(--warn)}
+div.tile{cursor:default}div.tile:hover{border-color:var(--line);transform:none}
+#attn.folded{display:flex;align-items:center;gap:6px 14px;flex-wrap:wrap;padding:10px 18px}
+#attn.folded h2{margin:0}#attn.folded .urgent{color:var(--bad);font-weight:600;font-size:13.5px}
+.sched{display:flex;align-items:center;gap:8px;flex-wrap:wrap;font-size:13.5px;color:var(--mute);margin:-2px 0 10px}
+.sched label{display:flex;align-items:center;gap:8px;cursor:pointer;min-height:36px}
+.sched input[type=checkbox]{width:18px;height:18px;margin:0;accent-color:var(--accent)}
+.pair{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));border-top:1px solid var(--rule);border-bottom:1px solid var(--line);margin:12px 0}
+.pair>div{padding:10px 0}.pair>div+div{padding-left:16px;border-left:1px solid var(--line)}
+.pair b{display:block;font-size:22px;font-weight:600;letter-spacing:-.3px;font-variant-numeric:tabular-nums}.pair span{color:var(--mute);font-size:13px}
 .grid2{display:grid;grid-template-columns:minmax(0,1.25fr) minmax(0,1fr);gap:12px;align-items:start}
 .grid2.even{grid-template-columns:minmax(0,1fr) minmax(0,1fr)}
 .grid2.mapview{grid-template-columns:minmax(0,1.9fr) minmax(0,1fr)}
@@ -302,11 +311,15 @@ input[type=password]{flex:1 1 180px;max-width:360px}
   </section>
 
   <section id="tab-blocked" role="tabpanel" aria-labelledby="t-blocked" class="stack" hidden>
+    <div class="tiles" id="btiles" aria-label="Blocking at a glance" style="margin-bottom:0"></div>
     <div class="card">
       <h2>Blocked sites</h2>
       <p class="mute">A blocked site stops working on every device that uses this network normally. Devices on a VPN or their own private DNS are not affected.</p>
       <div class="note" id="blockoff" hidden>Blocking is not switched on yet. On the Pi, get the latest lanledger and run <span class="mono">sudo ./install.sh</span> once.</div>
       <form class="row" id="blockform"><input type="text" id="blockq" placeholder="Site to block, e.g. tiktok.com" aria-label="Site to block"><button class="act">Block site</button></form>
+      <div class="sched"><label><input type="checkbox" id="blocksched">Only between</label>
+        <input type="time" id="blockfrom" value="21:00" aria-label="Block from" disabled> and
+        <input type="time" id="blockto" value="07:00" aria-label="Block until" disabled> every day</div>
       <div id="blockrows"></div>
     </div>
     <div class="card">
@@ -736,7 +749,7 @@ let filter = "all", sort = {key:null, dir:1}, liveRows = [], livePaused = false,
 let view = "list";
 try { if (localStorage.getItem("lanledger-view") === "map") view = "map"; } catch (e) {}
 let ownerInput = null, histOpen = false, portsBusy = false, speedBusy = false, schedEdit = null, liveOnlyBlocked = false, hasDeco = false;
-let blocked = new Set(), canBlock = false, attention = [], attnSeen = "", attnAll = false, techOpen = false;
+let blocked = new Set(), canBlock = false, attention = [], attnSeen = "", attnAll = false, techOpen = false, attnOpen = false, detailFull = false, refusedDay = null;
 
 // ---- blocking --------------------------------------------------------------
 function blockedBy(name){
@@ -745,16 +758,17 @@ function blockedBy(name){
 }
 const UNDO = "It can take a few minutes to take effect. You can undo it on the Blocked tab.";
 // target: a site address, {service:"TikTok"} for everything that service uses, or a list of either.
-async function setBlock(target, on, question){
+// hours: {from:"21:00", to:"07:00"} to block a site only during that daily window (sites only, not whole services).
+async function setBlock(target, on, question, hours){
   const list = [].concat(target), label = list[0].service || list[0];
   if (on && !confirm(question || (list[0].service
       ? `Block ${label} for every device on your network?\n\nThis blocks every address lanledger knows ${label} uses. ${UNDO}`
-      : `Block ${label} for every device on your network?\n\nEverything under it (like www.${label}) is blocked too. ${UNDO}`))) return false;
+      : `Block ${label} for every device on your network${hours ? `, from ${hours.from} to ${hours.to} every day` : ""}?\n\nEverything under it (like www.${label}) is blocked too. ${UNDO}`))) return false;
   for (const t of list) {
-    const r = await post("/api/block", t.service ? {service:t.service, on} : {domain:t, on});
+    const r = await post("/api/block", t.service ? {service:t.service, on} : hours && on ? {domain:t, on, from:hours.from, to:hours.to} : {domain:t, on});
     if (!r.ok) { toast(r.error); return false; }
   }
-  toast(on ? `${label} is now blocked` : `${label} is no longer blocked`);
+  toast(on ? (hours ? `${label} is blocked from ${hours.from} to ${hours.to} every day` : `${label} is now blocked`) : `${label} is no longer blocked`);
   await refresh();
   if ($("#domres table")) searchDomain(null, true);
   return true;
@@ -817,6 +831,10 @@ async function loadBlocked(){
       g.from != null && !g.active ? el("span", {class:"tag", title:"Outside its hours, so it is allowed right now"}, "not blocking now") : null, " ",
       el("button", {class:"mini", title:"Block only during certain hours, like bedtime", onclick:() => { schedEdit = g.key; loadBlocked(); }}, "Change hours"));
   };
+  const on = b.lists.filter(l => l.enabled).length;
+  fill($("#btiles"), [["bt-refused", refusedDay == null ? "–" : fmt(refusedDay), "lookups blocked in 24 hours"], ["bt-sites", fmt(groups.size), groups.size === 1 ? "site you blocked" : "sites you blocked"],
+    ["bt-lists", `${on} of ${b.lists.length}`, "ready-made lists switched on"], ["bt-allowed", fmt(b.allowed.length), b.allowed.length === 1 ? "exception" : "exceptions"]]
+    .map(([id, n, label]) => el("div", {class:"card tile"}, el("b", {id}, n), el("span", {}, label))));
   fill($("#blockrows"), table([{t:"Blocked"},{t:"When"},{t:"Tried in the last 24 hours",num:1},{t:""}],
     [...groups.values()].map(g => el("tr", {},
       el("td", {class:"site"}, g.svc ? [el("b", {}, g.svc), el("span", {class:"d"}, g.doms.length === 1 ? g.doms[0] : `${g.doms.length} addresses`)] : el("span", {class:"mono"}, g.doms[0])),
@@ -847,9 +865,13 @@ $("#blockform").addEventListener("submit", async e => {
   e.preventDefault();
   const v = $("#blockq").value.trim();
   if (!v) return;
-  await setBlock(v, true);
-  $("#blockq").value = "";
+  const hours = $("#blocksched").checked ? {from:$("#blockfrom").value, to:$("#blockto").value} : null;
+  if (hours && (!hours.from || !hours.to || hours.from === hours.to)) { toast("Give both a start and an end time, and make them different."); return; }
+  if (!await setBlock(v, true, null, hours)) return;
+  $("#blockq").value = ""; $("#blocksched").checked = false; $("#blockfrom").disabled = $("#blockto").disabled = true;
 });
+
+$("#blocksched").addEventListener("change", e => { $("#blockfrom").disabled = $("#blockto").disabled = !e.currentTarget.checked; });
 
 // ---- summary and the Activity tab -----------------------------------------
 const TILES = [
@@ -870,6 +892,7 @@ async function loadSummary(){
   $("#stext").textContent = trouble || (s.last_scan ? "network checked " + ago(s.last_scan) : "first network check in progress");
   $("#status").title = (s.trouble || []).join("\n");
   blocked = new Set(s.blocked); canBlock = s.can_block; hasDeco = s.deco;
+  refusedDay = s.refused; { const b = $("#bt-refused"); if (b) b.textContent = fmt(s.refused); }
   for (const [k] of TILES) $("#tile-" + k + " b").textContent = fmt(s[k]);
   $("#tile-unknown").classList.toggle("alert", s.unknown > 0);
   { // the network's last 24 hours, drawn into the lookups tile
@@ -950,13 +973,23 @@ function attnRow(it){
 }
 function renderAttention(){
   // Rebuilding would steal keyboard focus from these buttons every refresh, so only do it when something changed.
-  const sig = JSON.stringify([attention, attention.map(i => { const d = byMac.get(i.mac); return d && [devName(d), d.ip, d.online]; }), [...blocked], canBlock, attnAll]);
+  const sig = JSON.stringify([attention, attention.map(i => { const d = byMac.get(i.mac); return d && [devName(d), d.ip, d.online]; }), [...blocked], canBlock, attnAll, view === "map" && !attnOpen]);
   const badge = $("#navn"); badge.hidden = !attention.length; badge.textContent = attention.length;
   if (sig === attnSeen) return;
   attnSeen = sig;
   const box = $("#attn"); box.hidden = false;
   box.classList.toggle("clear", !attention.length);
-  if (!attention.length) { fill(box, "✓ Nothing needs your attention right now."); return; }
+  if (!attention.length) { box.classList.remove("folded"); fill(box, "✓ Nothing needs your attention right now."); return; }
+  // The map needs the room: beside it the list folds down to one line, security warnings still called out.
+  const folded = view === "map" && !attnOpen;
+  box.classList.toggle("folded", folded);
+  if (folded) {
+    const urgent = attention.filter(urgentKind).length;
+    fill(box, el("h2", {}, `Needs your attention (${attention.length})`),
+      urgent ? el("span", {class:"urgent"}, `${urgent} security warning${urgent === 1 ? "" : "s"}`) : null,
+      el("button", {class:"ghost spacer", onclick:() => { attnOpen = true; renderAttention(); }}, "Show all"));
+    return;
+  }
   // On a fresh install every device is new: one row for the lot instead of a wall of them.
   const news = attention.filter(i => i.kind === "new").map(i => byMac.get(i.mac)).filter(Boolean);
   const rest = news.length > 2 ? attention.filter(i => i.kind !== "new") : attention;
@@ -1066,6 +1099,7 @@ async function forget(d){
   deselect(); attnSeen = ""; await refresh(); toast("Device forgotten");
 }
 function select(mac, scroll = true){
+  if (mac !== selected) detailFull = false;
   selected = mac; syncHash(); renderDevices();
   const done = renderDetail();
   if (mac && scroll && narrow()) $("#detail").scrollIntoView({behavior:"smooth", block:"start"});
@@ -1158,6 +1192,29 @@ async function renderDetail(refresh){
   try { data = await api(`/api/device?mac=${encodeURIComponent(d.mac)}&hours=${range}&group=${group}`); } catch (e) { return; }
   if (selected !== d.mac) return;
   const head = $("#dhead"), body = $("#dbody");
+  // Beside the map (and only where the two sit side by side) a device opens as a short card; the rest is one click away.
+  const brief = view === "map" && !detailFull && !narrow();
+  body.querySelector(".sec").hidden = $("#dact").hidden = brief;
+  if (brief) {
+    if (refresh && head.contains(document.activeElement)) return;   // do not pull a button out from under the keyboard
+    const total = data.hourly.reduce((n, p) => n + p.c, 0), u = data.usage, period = range === 24 ? "24 hours" : range === 168 ? "7 days" : "30 days";
+    fill(head, el("div", {class:"dtitle"}, icon(d, true),
+        el("div", {}, el("h2", {}, devName(d), d.known ? null : el("span", {class:"tag new"}, "new")),
+          el("div", {class:"dstate"}, [d.online ? "Online now" : "Offline, last seen " + ago(d.last_seen), d.owner, connName(d.conn_live || d.conn), nodeName(d)].filter(Boolean).join(" · "))),
+        el("button", {class:"x", "aria-label":"Close device details", title:"Close", onclick:deselect}, "×")),
+      d.private ? el("p", {class:"say", style:"margin-top:12px"}, "You asked lanledger not to record what this device looks up.")
+        : data.activity.length ? el("p", {class:"say", style:"margin-top:12px"}, sentence(data.activity)) : null,
+      el("div", {class:"pair"}, el("div", {}, el("b", {}, fmt(total)), el("span", {}, `lookups in ${period}`)),
+        u.down || u.up ? el("div", {title:"Worked out from the speeds your Deco reports, so treat it as a rough figure"}, el("b", {}, fmtBytes(u.down)), el("span", {}, "down, estimated"))
+          : el("div", {}, el("b", {}, fmt(data.top.length)), el("span", {}, data.top.length === 1 ? "site contacted" : "sites contacted"))),
+      data.activity.some(a => a.cat === "VPN & encrypted DNS") ? el("div", {class:"note"}, "This device uses a VPN, iCloud Private Relay or private DNS, so part of what it does is not visible here.") : null,
+      el("div", {class:"row", style:"margin:12px 0 0"},
+        el("button", {class:"act", onclick:() => { detailFull = true; renderDetail(); }}, "Open full details"),
+        el("button", {class:"ghost", onclick:() => setView("list")}, "Show on list")));
+    labelInput = null;
+    $("#dempty").hidden = true; body.hidden = false;
+    return;
+  }
   const busy = refresh && labelInput && labelInput.isConnected && (head.contains(document.activeElement) || labelInput.value !== (d.label || "") || ownerInput.value !== (d.owner || ""));
   if (!busy) fill(head, detailHead(d));
   const refocus = refresh && body.contains(document.activeElement) && document.activeElement.dataset.v;
@@ -1221,6 +1278,7 @@ async function openDevice(mac, focusName){
   filter = "all"; sort = {key:null, dir:1}; $("#devfilter").value = "";
   setTab("devices");
   await select(mac);
+  if (focusName && view === "map" && !detailFull) { detailFull = true; await renderDetail(); }   // the name box is in the full panel
   const r = [...$("#devrows").children].find(r => r.dataset.mac === mac);
   if (r && !narrow()) r.scrollIntoView({block:"nearest"});
   if (focusName && labelInput && labelInput.isConnected) labelInput.focus({preventScroll: narrow()});
@@ -1399,7 +1457,10 @@ function setView(v){
   view = v;
   try { localStorage.setItem("lanledger-view", v); } catch (e) {}
   for (const b of document.querySelectorAll("#viewseg button")) b.setAttribute("aria-pressed", String(b.dataset.view === v));
+  attnOpen = false; detailFull = false;
   renderDevices();
+  if (attnSeen) renderAttention();
+  if (selected && byMac.has(selected)) renderDetail();
 }
 for (const b of document.querySelectorAll("#viewseg button")) b.addEventListener("click", () => setView(b.dataset.view));
 setView(view);
