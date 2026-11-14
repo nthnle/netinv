@@ -7,17 +7,31 @@ SRC="$(cd "$(dirname "$0")" && pwd)"
 
 # ---- moving from the project's old name -------------------------------------------------
 # lanledger used to be called netinv. An install under that name is carried over whole: its history,
-# device names, password, block lists and remembered options. Nothing is copied, only moved, so this
-# takes a moment and happens once.
+# device names, password, block lists and remembered options. Nothing is copied, only moved.
+# Every step looks at what is actually there, so a move that was cut short (power, a closed
+# terminal) is finished by running the installer again, wherever it stopped.
 OLD=netinv
-if [[ -d /var/lib/$OLD && ! -e /var/lib/lanledger ]]; then
+NEWDB=/var/lib/lanledger/lanledger.db
+if [[ -d /var/lib/$OLD || -e /var/lib/lanledger/$OLD.db || -d /var/lib/$OLD-dns || -d /var/log/$OLD || -d /etc/$OLD \
+      || -e /etc/systemd/system/$OLD.service || -d /opt/$OLD ]]; then
   echo "Found an install under the old name ($OLD). Moving it to lanledger."
   systemctl disable -q --now "$OLD.service" "$OLD-blocklist.path" 2>/dev/null || true
   systemctl stop -q "$OLD-blocklist.service" 2>/dev/null || true
-  mv "/var/lib/$OLD" /var/lib/lanledger
-  for f in "/var/lib/lanledger/$OLD.db" "/var/lib/lanledger/$OLD.db-wal" "/var/lib/lanledger/$OLD.db-shm"; do
-    if [[ -e "$f" ]]; then mv "$f" "/var/lib/lanledger/lanledger.db${f#"/var/lib/lanledger/$OLD.db"}"; fi
-  done
+  if [[ -d /var/lib/$OLD && ! -e /var/lib/lanledger ]]; then mv "/var/lib/$OLD" /var/lib/lanledger; fi
+  if [[ -e /var/lib/lanledger/$OLD.db ]]; then
+    if [[ -e $NEWDB ]]; then
+      echo "WARNING: both $NEWDB and the old /var/lib/lanledger/$OLD.db exist. Keeping the new one;" >&2
+      echo "         the old history is still in /var/lib/lanledger/$OLD.db if you want it back." >&2
+    else
+      systemctl stop -q lanledger.service 2>/dev/null || true
+      for ext in "" -wal -shm; do
+        if [[ -e "/var/lib/lanledger/$OLD.db$ext" ]]; then mv "/var/lib/lanledger/$OLD.db$ext" "$NEWDB$ext"; fi
+      done
+    fi
+  fi
+  if [[ -d /var/lib/$OLD && -e /var/lib/lanledger ]]; then
+    echo "WARNING: /var/lib/$OLD is still there beside /var/lib/lanledger and was left alone." >&2
+  fi
   for d in /var/lib/%s-dns /var/log/%s /etc/%s; do
     from="${d//%s/$OLD}" to="${d//%s/lanledger}"
     if [[ -d "$from" && ! -e "$to" ]]; then mv "$from" "$to"; fi
@@ -30,19 +44,24 @@ fi
 # Options given on an earlier run are remembered, so an update needs none of them repeated.
 # Anything set on the command line this time wins. Only what was actually given is kept:
 # what the installer worked out for itself is worked out afresh each time.
+# To forget one, give it the value "default":  sudo NOTIFY_URL=default ./install.sh
+# EXTRA_ARGS is passed to lanledger as it is, for options the installer has no name for:
+#   sudo EXTRA_ARGS="--retention-days 14 --no-threat-list" ./install.sh
 CONF="${LANLEDGER_CONF:-/etc/lanledger/install.conf}"
 if [[ -f "$CONF" ]]; then
   while IFS='=' read -r key value; do
     case "$key" in
-      IFACE|GATEWAY|UPSTREAM1|UPSTREAM2|PORT|NOTIFY_URL|ENCRYPTED_DNS)
+      IFACE|GATEWAY|UPSTREAM1|UPSTREAM2|PORT|NOTIFY_URL|ENCRYPTED_DNS|EXTRA_ARGS)
         if [[ -z "${!key:-}" ]]; then printf -v "$key" '%s' "$value"; fi ;;
     esac
   done < "$CONF"
 fi
 GIVEN=""
-for key in IFACE GATEWAY UPSTREAM1 UPSTREAM2 PORT NOTIFY_URL ENCRYPTED_DNS; do
+for key in IFACE GATEWAY UPSTREAM1 UPSTREAM2 PORT NOTIFY_URL ENCRYPTED_DNS EXTRA_ARGS; do
+  if [[ "${!key:-}" == default ]]; then printf -v "$key" '%s' ""; fi
   if [[ -n "${!key:-}" ]]; then GIVEN+="$key=${!key}"$'\n'; fi
 done
+EXTRA_ARGS="${EXTRA_ARGS:-}"
 
 IFACE="${IFACE:-$(ip -4 route show default | awk '{for(i=1;i<=NF;i++) if($i=="dev"){print $(i+1); exit}}')}"
 GATEWAY="${GATEWAY:-$(ip -4 route show default | awk '{print $3; exit}')}"
@@ -114,7 +133,10 @@ touch /var/log/lanledger/dnsmasq.log
 chown "$DNSMASQ_USER":lanledger /var/log/lanledger/dnsmasq.log
 chmod 640 /var/log/lanledger/dnsmasq.log
 
-cat > /etc/dnsmasq.d/lanledger.conf <<EOF
+DCONF=/etc/dnsmasq.d/lanledger.conf
+DCONF_OLD="$(dirname "$CONF")/dnsmasq.conf.previous"   # kept outside dnsmasq.d, where dnsmasq would read it too
+if [[ -f "$DCONF" ]]; then cp -p "$DCONF" "$DCONF_OLD"; else rm -f "$DCONF_OLD"; fi
+cat > "$DCONF" <<EOF
 # Managed by lanledger. DNS forwarder with per-client query logging. No DHCP.
 port=53
 bogus-priv
@@ -133,11 +155,20 @@ log-queries=extra
 log-facility=/var/log/lanledger/dnsmasq.log
 log-async=50
 EOF
+# Every device in the house depends on this file. If dnsmasq will not accept the new one, the one that was
+# working goes back, so the next reboot does not leave the house without lookups.
+if ! dnsmasq --test; then
+  if [[ -f "$DCONF_OLD" ]]; then cp -p "$DCONF_OLD" "$DCONF"; else rm -f "$DCONF"; fi
+  echo "dnsmasq rejected the new settings (see above). The previous ones were put back; nothing was restarted." >&2
+  exit 1
+fi
+DNSMASQ_CHANGED=1
+if [[ -f "$DCONF_OLD" ]] && cmp -s "$DCONF" "$DCONF_OLD"; then DNSMASQ_CHANGED=0; fi
 
 cat > /etc/logrotate.d/lanledger <<EOF
 /var/log/lanledger/dnsmasq.log {
     daily
-    rotate 3
+    rotate 1
     missingok
     notifempty
     compress
@@ -158,7 +189,7 @@ Wants=network-online.target
 [Service]
 User=lanledger
 Group=lanledger
-ExecStart=/usr/bin/python3 /opt/lanledger/lanledger.py --iface $IFACE --gateway $GATEWAY --port $PORT --block-file $BLOCK_FILE --block-hosts $HOSTS_FILE${NOTIFY_URL:+ --notify-url $NOTIFY_URL}
+ExecStart=/usr/bin/python3 /opt/lanledger/lanledger.py --iface $IFACE --gateway $GATEWAY --port $PORT --block-file $BLOCK_FILE --block-hosts $HOSTS_FILE${NOTIFY_URL:+ --notify-url $NOTIFY_URL}${EXTRA_ARGS:+ $EXTRA_ARGS}
 Restart=on-failure
 RestartSec=5
 # raw sockets for arp-scan, nothing else
@@ -199,10 +230,11 @@ Type=oneshot
 ExecStart=/usr/bin/pkill -HUP -x dnsmasq
 EOF
 
-dnsmasq --test
 systemctl daemon-reload
 systemctl enable -q dnsmasq lanledger lanledger-blocklist.path
-systemctl restart dnsmasq lanledger lanledger-blocklist.path
+# Restarting dnsmasq drops lookups for the whole house for a moment: only when its settings changed or it is not running.
+if [[ $DNSMASQ_CHANGED == 1 ]] || ! systemctl is-active -q dnsmasq; then systemctl restart dnsmasq; fi
+systemctl restart lanledger lanledger-blocklist.path
 
 cat <<EOF
 

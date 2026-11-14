@@ -12,8 +12,8 @@
 <meta name="apple-mobile-web-app-title" content="lanledger">
 <script>try{if(localStorage.getItem("lanledger-theme")==="light")document.documentElement.dataset.theme="light"}catch(e){}</script>
 <style>
-:root{color-scheme:dark;--bg:#090c13;--card:#111725;--ink:#e8ecf3;--mute:#8d99ab;--line:#222b3c;--accent:#4cc9f0;--accent2:#8b7cf6;--soft:#4cc9f01f;--ok:#34d399;--warn:#fbbf24;--warnbg:#fbbf2414;--bad:#f87171;--bar:#4cc9f0;--on-accent:#06121a;--lift:0 0 0 1px #4cc9f012,0 18px 40px -24px #000}
-:root[data-theme=light]{color-scheme:light;--bg:#f2f4f8;--card:#fff;--ink:#141a24;--mute:#566275;--line:#dde3ec;--accent:#0b74c4;--accent2:#6d4fd8;--soft:#0b74c41a;--ok:#15803d;--warn:#b45309;--warnbg:#b453091a;--bad:#b91c1c;--bar:#0b74c4;--on-accent:#fff;--lift:0 1px 2px #1118270d,0 14px 30px -22px #11182740}
+:root{color-scheme:dark;--bg:#090c13;--card:#111725;--ink:#e8ecf3;--mute:#8d99ab;--line:#222b3c;--edge:#62718a;--accent:#4cc9f0;--accent2:#8b7cf6;--soft:#4cc9f01f;--ok:#34d399;--warn:#fbbf24;--warnbg:#fbbf2414;--bad:#f87171;--bar:#4cc9f0;--on-accent:#06121a;--lift:0 0 0 1px #4cc9f012,0 18px 40px -24px #000}
+:root[data-theme=light]{color-scheme:light;--bg:#f2f4f8;--card:#fff;--ink:#141a24;--mute:#566275;--line:#dde3ec;--edge:#8490a3;--accent:#0b74c4;--accent2:#6d4fd8;--soft:#0b74c41a;--ok:#15803d;--warn:#b45309;--warnbg:#b453091a;--bad:#b91c1c;--bar:#0b74c4;--on-accent:#fff;--lift:0 1px 2px #1118270d,0 14px 30px -22px #11182740}
 *{box-sizing:border-box}
 body{margin:0;background:var(--bg);color:var(--ink);font:15px/1.45 system-ui,-apple-system,Segoe UI,Roboto,sans-serif}
 body::before{content:"";position:fixed;inset:0;z-index:-1;pointer-events:none;background:
@@ -53,6 +53,7 @@ main{padding:16px 20px 48px;max-width:1280px;margin:0 auto}
 .tile.alert b{color:var(--warn)}
 .grid2{display:grid;grid-template-columns:minmax(0,1.25fr) minmax(0,1fr);gap:12px;align-items:start}
 .grid2.even{grid-template-columns:minmax(0,1fr) minmax(0,1fr)}
+.grid2.mapview{grid-template-columns:minmax(0,1.9fr) minmax(0,1fr)}
 .stack>*+*{margin-top:12px}
 
 /* needs attention */
@@ -62,6 +63,7 @@ main{padding:16px 20px 48px;max-width:1280px;margin:0 auto}
 .attn-row .txt{flex:1 1 260px;min-width:0}
 .attn-row .txt b{display:block}
 .attn-row.urgent .txt b{color:var(--bad)}
+.tag.bad{border-color:var(--bad);color:var(--bad);margin-left:0;font-weight:600}
 .attn-row .txt span{color:var(--mute);font-size:13.5px}
 .attn-row .btns{display:flex;gap:8px;flex-wrap:wrap}
 
@@ -71,8 +73,8 @@ td{padding:8px;border-bottom:1px solid var(--line);vertical-align:middle;overflo
 tr:last-child td{border-bottom:0}
 th button{background:none;border:0;padding:0;font-weight:600;color:inherit;cursor:pointer}
 th button:hover{color:var(--ink)}
-th[aria-sort=ascending] button::after{content:" \25B2";font-size:9px}
-th[aria-sort=descending] button::after{content:" \25BC";font-size:9px}
+th[aria-sort=ascending] button::after{content:" \25B2";font-size:11px}
+th[aria-sort=descending] button::after{content:" \25BC";font-size:11px}
 th[aria-sort] button{color:var(--ink)}
 tbody tr.click{cursor:pointer}
 tbody tr.click:hover,tbody tr.sel{background:var(--soft)}
@@ -115,7 +117,7 @@ tbody tr.click:focus-visible{outline-offset:-2px}
 .map .node.sel circle{stroke:var(--ink);stroke-width:2.5;filter:drop-shadow(0 0 8px var(--accent))}
 .map .node .g{fill:none;stroke:var(--mute);stroke-width:1.5;stroke-linecap:round;stroke-linejoin:round}
 .map .node.on .g{stroke:var(--accent)}
-.map text{fill:var(--mute);font-size:11px;text-anchor:middle;pointer-events:none}
+.map text{fill:var(--mute);font-size:var(--lbl,11px);text-anchor:middle;pointer-events:none}
 .map .node.on text,.map .hub text{fill:var(--ink)}
 .map .hub circle{fill:color-mix(in srgb,var(--accent) 14%,var(--card));stroke:var(--accent);stroke-width:2}
 .map .hub .g{stroke:var(--accent)}
@@ -127,10 +129,10 @@ tbody tr.click:focus-visible{outline-offset:-2px}
 .tag.bad{color:var(--bad);border-color:var(--bad)}
 .site .d{color:var(--mute);margin-left:8px}
 
-input[type=text],input[type=search]{background:var(--card);border:1px solid var(--line);border-radius:8px;padding:8px 10px;width:100%;max-width:360px;min-width:0;flex:1 1 180px}
+input[type=text],input[type=search]{background:var(--card);border:1px solid var(--edge);border-radius:8px;padding:8px 10px;width:100%;max-width:360px;min-width:0;flex:1 1 180px}
 button.act{background:linear-gradient(135deg,var(--accent),color-mix(in srgb,var(--accent) 70%,var(--accent2)));color:var(--on-accent);border:0;border-radius:8px;padding:8px 14px;cursor:pointer;font-weight:600;white-space:nowrap}
 button.act:hover{filter:brightness(1.08)}
-button.ghost,a.ghost{background:none;border:1px solid var(--line);border-radius:8px;padding:8px 12px;cursor:pointer;white-space:nowrap;color:var(--ink);text-decoration:none;display:inline-block}
+button.ghost,a.ghost{background:none;border:1px solid var(--edge);border-radius:8px;padding:8px 12px;cursor:pointer;white-space:nowrap;color:var(--ink);text-decoration:none;display:inline-block}
 button.ghost:hover,a.ghost:hover{border-color:var(--mute)}
 button.mini{background:none;border:1px solid var(--line);border-radius:6px;padding:2px 8px;font-size:12px;cursor:pointer;color:var(--mute);white-space:nowrap}
 button.mini:hover{color:var(--bad);border-color:var(--bad)}
@@ -189,7 +191,7 @@ dt{color:var(--mute)}dd{margin:0;overflow-wrap:anywhere}
 #login{position:fixed;inset:0;z-index:20;background:var(--bg);display:grid;place-items:center;padding:16px}
 #login form{width:100%;max-width:400px}
 #loginmsg{color:var(--bad);min-height:20px;margin:0}
-input[type=password],input[type=time],select{background:var(--card);border:1px solid var(--line);border-radius:8px;padding:8px 10px;min-width:0;color:var(--ink);font:inherit}
+input[type=password],input[type=time],select{background:var(--card);border:1px solid var(--edge);border-radius:8px;padding:8px 10px;min-width:0;color:var(--ink);font:inherit}
 input[type=password]{flex:1 1 180px;max-width:360px}
 .rate{color:var(--accent)}
 .kv{display:flex;gap:6px 18px;flex-wrap:wrap;margin:8px 0;font-size:13.5px}
@@ -589,7 +591,7 @@ function renderMap(list){
     return svgEl("g", {class:"node " + cls + (d && d.mac === selected ? " sel" : ""), transform:`translate(${x.toFixed(1)} ${y.toFixed(1)})`,
         tabindex: d ? 0 : null, role: d ? "button" : null, "data-mac": d ? d.mac : null, "aria-label": d ? tip.replace(/ · /g, ", ") : null,
         onclick:go, onkeydown: d ? e => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); go(); } } : null},
-      svgEl("title", {}, tip), svgEl("circle", {r:rad.toFixed(1)}), glyph(kind), svgEl("text", {y:(above ? -rad - 7 : rad + 14).toFixed(1)}, label));
+      svgEl("title", {}, tip), svgEl("circle", {r:rad.toFixed(1)}), glyph(kind), svgEl("text", {y:(above ? -rad : rad).toFixed(1), dy: above ? "-.5em" : "1.15em"}, label));
   };
   for (const g of [centre, ...sats]) {
     g.rings.forEach((ring, k) => ring.items.forEach((d, j) => {
@@ -614,7 +616,7 @@ function renderMap(list){
     : (meshed ? "Each cluster is a Deco unit and the devices connected through it, usually the nearest one. " : "") + "Bigger circles and brighter lines mean more activity. Orange rings are new devices. Click one to open it.";
   const svg = svgEl("svg", {style:`max-width:${Math.round((x1 - x0) * 1.35)}px`, role:"group", "aria-label":"Map of devices on your network"}, links, marks, hubs);
   const zoom = list.length ? el("div", {class:"mapzoom", role:"group", "aria-label":"Zoom"}) : null;
-  fill($("#map"), zoom, svg, el("p", {class:"maphint"}, hint + (list.length ? " Zoom with + and − (or Ctrl and the scroll wheel), then drag to move around." : "")));
+  fill($("#map"), zoom, svg, el("p", {class:"maphint"}, hint + (list.length ? " Zoom with + and − (or Ctrl and the scroll wheel), then drag or use the arrow keys to move around." : "")));
   mapZoomable(svg, zoom, {x:x0, y:y0, w:x1 - x0, h:y1 - y0});
   if (focused) { const n = $("#map").querySelector(`[data-mac="${CSS.escape(focused)}"]`); if (n) n.focus(); }
 }
@@ -629,6 +631,10 @@ function mapZoomable(svg, bar, base){
     z.cy = Math.min(base.y + base.h - h / 2, Math.max(base.y + h / 2, z.cy));
     svg.setAttribute("viewBox", `${(z.cx - w / 2).toFixed(1)} ${(z.cy - h / 2).toFixed(1)} ${w.toFixed(1)} ${h.toFixed(1)}`);
     svg.classList.toggle("zoomed", z.k > 1);
+    // Names are sized for the screen, not for the drawing: a big house shrinks the drawing to fit, and the names with it,
+    // until nobody can read them. Never under ten pixels as shown; zooming in then spreads devices apart under names that stay put.
+    const shown = svg.getBoundingClientRect().width / w;
+    if (shown > 0) svg.style.setProperty("--lbl", Math.max(11, 10 / shown).toFixed(1) + "px");
     if (btn.out) { btn.out.disabled = z.k <= 1; btn.in.disabled = z.k >= MAX; btn.reset.hidden = z.k <= 1; }
   };
   // where on the map a point of the screen is
@@ -668,6 +674,17 @@ function mapZoomable(svg, bar, base){
     down.set(e.pointerId, [e.clientX, e.clientY]);
   });
   for (const t of ["pointerup", "pointercancel"]) svg.addEventListener(t, e => down.delete(e.pointerId));
+  // the same from the keyboard, with the map or anything on it focused: arrows move, + and - zoom, 0 shows everything
+  svg.addEventListener("keydown", e => {
+    const step = {ArrowLeft:[-1, 0], ArrowRight:[1, 0], ArrowUp:[0, -1], ArrowDown:[0, 1]}[e.key];
+    if (step && z.k > 1) { z.cx += step[0] * base.w / z.k * .2; z.cy += step[1] * base.h / z.k * .2; apply(); }
+    else if (e.key === "+" || e.key === "=") zoomBy(1.5);
+    else if (e.key === "-" || e.key === "_") zoomBy(1 / 1.5);
+    else if (e.key === "0") zoomBy(0);
+    else return;
+    e.preventDefault();
+  });
+  if (window.ResizeObserver) new ResizeObserver(apply).observe(svg);
   svg.addEventListener("click", e => { if (dragging) { e.stopPropagation(); e.preventDefault(); dragging = false; } }, true);   // the end of a drag is not a click on a device
   apply();
 }
@@ -848,8 +865,10 @@ function showDevices(f){ filter = f; $("#devfilter").value = ""; setTab("devices
 
 async function loadSummary(){
   const s = await api("/api/summary");
-  $("#sdot").className = "dot on"; $("#status").classList.remove("bad");
-  $("#stext").textContent = s.last_scan ? "network checked " + ago(s.last_scan) : "first network check in progress";
+  const trouble = (s.trouble || [])[0];
+  $("#sdot").className = trouble ? "dot bad" : "dot on"; $("#status").classList.toggle("bad", !!trouble);
+  $("#stext").textContent = trouble || (s.last_scan ? "network checked " + ago(s.last_scan) : "first network check in progress");
+  $("#status").title = (s.trouble || []).join("\n");
   blocked = new Set(s.blocked); canBlock = s.can_block; hasDeco = s.deco;
   for (const [k] of TILES) $("#tile-" + k + " b").textContent = fmt(s[k]);
   $("#tile-unknown").classList.toggle("alert", s.unknown > 0);
@@ -927,7 +946,7 @@ function attnRow(it){
       `Block ${it.services.join(", ")} for every device on your network?\n\nThose ads and trackers stop loading everywhere. Now and then a site or app that depends on them misbehaves. ${UNDO}`)) dismiss(it.key); }}, "Block the tracking") : null, view, ignore];
   }
   const urgent = urgentKind(it);
-  return el("div", {class:"attn-row" + (urgent ? " urgent" : "")}, d ? icon(d) : null, el("div", {class:"txt"}, el("b", {}, title), el("span", {}, text)), el("div", {class:"btns"}, btns));
+  return el("div", {class:"attn-row" + (urgent ? " urgent" : "")}, d ? icon(d) : null, el("div", {class:"txt"}, el("b", {}, urgent ? [el("span", {class:"tag bad"}, "Security"), " "] : null, title), el("span", {}, text)), el("div", {class:"btns"}, btns));
 }
 function renderAttention(){
   // Rebuilding would steal keyboard focus from these buttons every refresh, so only do it when something changed.
@@ -999,19 +1018,20 @@ function renderDevices(){
     const name = devName(d);
     const conn = connName(d.conn_live || d.conn).replace("Wi-Fi ", "");
     const sub = [isGuess(d) ? "guessed from its activity" : null, d.owner || null, conn || null, nodeName(d) || null, isUnnamed(d) && d.vendor && d.vendor !== name ? d.vendor : null, d.ip,
-      d.isolated ? "isolated" : null, isReal(d) ? null : "seen only by its lookups"].filter(Boolean).join(" · ");
+      d.isolated ? "isolated" : null, d.private ? "not recorded" : null, isReal(d) ? null : "seen only by its lookups"].filter(Boolean).join(" · ");
     return clickRow(() => select(d.mac), {class: d.mac === selected ? "sel" : "", "data-mac":d.mac, "aria-selected": d.mac === selected ? "true" : null},
       el("td", {}, el("div", {class:"dev"}, icon(d), el("div", {},
         el("div", {class:"nm"}, name, d.known ? null : el("span", {class:"tag new"}, "new"),
           d.net === "guest" ? el("span", {class:"tag", title:"Connected to your guest Wi-Fi"}, "guest") : null),
         el("div", {class:"sub"}, sub)))),
-      el("td", {class: d.mostly ? "" : "mute"}, d.mostly || (d.isolated ? "Isolated from the Pi" : isSilent(d) ? "Nothing visible" : d.infra ? "Runs the network" : "–"),
+      el("td", {class: d.mostly ? "" : "mute"}, d.mostly || (d.private ? "Not recorded" : d.isolated ? "Isolated from the Pi" : isSilent(d) ? "Nothing visible" : d.infra ? "Runs the network" : "–"),
         d.hidden ? el("span", {class:"tag", title:"Uses a VPN, iCloud Private Relay or private DNS: part of what it does is not visible"}, "partly hidden") : null),
       el("td", {class:"num hide-s", title:sparkTip(d.spark)}, spark(d.spark, 84, 22), el("div", {class:"cnt"}, fmt(d.queries)),
         d.down > 2000 || d.up > 2000 ? el("div", {class:"cnt rate", title:"Speed right now, from the Deco"}, `↓ ${fmtRate(d.down)}`) : null),
       el("td", {class:"num"}, d.online ? "online" : ago(d.last_seen)));
   });
   $("#map").hidden = view !== "map"; $("#listwrap").hidden = view === "map";
+  $("#map").closest(".grid2").classList.toggle("mapview", view === "map");
   if (view === "map") renderMap(list);
   const none = !devices.length ? "No devices yet. The first check of your network is still running." : "No devices match.";
   fill($("#devrows"), rows.length ? rows : el("tr", {}, el("td", {colspan:4, class:"empty"}, none,
@@ -1108,6 +1128,10 @@ function detailHead(d){
     real && !unnamed ? el("div", {style:"margin-top:12px"}, nameRow) : null,
     el("div", {class:"row", style:"margin:10px 0 0"},
       real ? el("button", {class:"ghost", onclick:() => update(d.mac, {known: !d.known}, d.known ? "Marked as new again" : "Marked as reviewed")}, d.known ? "Mark as new again" : "Mark as reviewed") : null,
+      real && !d.infra ? el("button", {class:"ghost", title:"For a device whose activity is nobody else's business", onclick:() => {
+        if (d.private || confirm(`Stop recording what ${devName(d)} looks up?\n\nWhat has been recorded for it is erased now, and nothing more is kept. It stays in the device list, blocks still apply to it, and you are still warned if it reaches for a known-bad site.`))
+          update(d.mac, {private: !d.private}, d.private ? "Its activity is recorded again" : "No longer recorded, and its history erased"); }},
+        d.private ? "Record its activity again" : "Stop recording its activity") : null,
       todo.length ? el("button", {class:"ghost", title:"Open the next device you have not reviewed", onclick:() => select(todo[0].mac, false)}, `Next new device (${todo.length}) →`) : null,
       el("button", {class:"link danger spacer", title:"Remove this device and its history from lanledger", onclick:() => forget(d)}, "Forget device")),
     tech,
@@ -1140,6 +1164,7 @@ async function renderDetail(refresh){
   const ports = data.ports;
   fill($("#dact"),
     el("p", {class:"say"}, d.infra && !data.activity.length ? "This is part of the network itself (your router, a mesh unit, or the Pi running lanledger). It does not ask lanledger for addresses, so nothing shows here. That is normal."
+      : d.private ? "You asked lanledger not to record what this device looks up, so there is nothing to show. Security warnings still apply to it."
       : d.isolated && !data.activity.length ? "Your Deco reports it online, but it does not answer the Pi. That is what Device Isolation in the Deco app does. Its lookups cannot reach lanledger either, so nothing shows here and blocks do not apply to it."
       : isSilent(d) && range === 24 ? (d.last_lookup ? `Nothing in the last 24 hours. It last looked something up ${ago(d.last_lookup)}. Appliances often go days between lookups, so that is normal.`
         : "It is online, but lanledger has seen nothing from it for a week. It may be using its own DNS or a VPN.") : sentence(data.activity)),
@@ -1310,13 +1335,19 @@ async function loadSettings(){
       el("li", {}, "Data figures are estimates from the speeds the Deco reports, sampled every 30 seconds.")));
   // alerts
   const url = el("input", {type:"text", value:st.notify_url || "", placeholder:"https://ntfy.sh/a-name-nobody-would-guess"});
+  const plain = el("input", {type:"checkbox", id:"notify-plain"});
+  plain.checked = !!st.notify_plain;
+  plain.addEventListener("change", () => act("/api/settings/notify", {url:st.notify_url || "", plain:plain.checked}, plain.checked ? "Alerts will leave names out" : "Alerts will include names"));
   fill($("#set-notify"),
-    el("p", {}, "Get a message when a new device joins your network or your internet comes back after an outage. The easy way: install the free ntfy app, subscribe to a topic name you make up, and put its address here."),
+    el("p", {}, "Get a message when a new device joins your network, a security warning is raised, or your internet comes back after an outage. The easy way: install the free ntfy app, subscribe to a topic name you make up, and put its address here."),
     el("div", {class:"form"}, field("Where to send alerts", url),
       el("div", {class:"row", style:"margin:0"},
         el("button", {class:"act", onclick:() => act("/api/settings/notify", {url:url.value, test:true}, url.value ? "Saved. A test alert is on its way." : "Alerts turned off")}, url.value || !st.notify_url ? "Save and send a test" : "Save"),
         st.notify_url ? el("button", {class:"ghost", onclick:() => act("/api/settings/notify", {url:""}, "Alerts turned off")}, "Turn off") : null)),
-    el("p", {class:"mute", style:"margin:10px 0 0;font-size:13.5px"}, "Alerts leave your network through that address, so anyone who knows the topic name can read them. Pick one that is hard to guess."));
+    el("p", {class:"mute", style:"margin:10px 0 0;font-size:13.5px"}, "Alerts leave your network through that address, so anyone who knows the topic name can read them. Pick one that is hard to guess."),
+    el("p", {style:"margin:10px 0 0"}, el("label", {for:"notify-plain", style:"display:flex;gap:8px;align-items:flex-start;cursor:pointer"}, plain,
+      el("span", {}, "Leave device and site names out of alerts", el("span", {class:"mute", style:"display:block;font-size:13.5px"},
+        "An alert then says only that something happened, such as “A device tried to reach a site on the malware and phishing list”, and you open lanledger for the details. The alert service never sees who or what.")))));
 }
 $("#loginform").addEventListener("submit", async e => {
   e.preventDefault();

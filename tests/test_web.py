@@ -158,6 +158,128 @@ class SignIn(Web):
         self.assertEqual(h.who(), "127.0.0.1")
 
 
+class Endpoints(Web):
+    """Every address the dashboard calls, asked the way the dashboard asks it."""
+    MAC = "a8:00:00:00:00:01"
+
+    def setUp(self):
+        super().setUp()
+        self.set_password()
+        now = int(time.time())
+        self.app.seen(self.MAC, "127.0.0.1", "Acme", now)                # at this machine's own address, so the port check has something to knock on
+        self.app.x("UPDATE devices SET known=1, label='Kitchen TV', owner='Sam', first_seen=? WHERE mac=?", (now - 20 * 86400, self.MAC))
+        self.app.x("INSERT INTO dns_hourly(dev, domain, base, hour, count) VALUES(?,?,?,?,?)",
+                   (self.MAC, "www.netflix.com", "netflix.com", now - now % 3600, 12))
+
+    def get(self, path):
+        status, body = self.call("GET", path)
+        self.assertEqual(status, 200, path)
+        return body
+
+    def post(self, path, body, want=200):
+        status, out = self.call("POST", path, body)
+        self.assertEqual(status, want, (path, out))
+        return out
+
+    def test_reading(self):
+        self.assertEqual(self.get("/api/people")[0]["person"], "Sam")
+        self.assertEqual([(r["domain"], r["dev"]) for r in self.get("/api/domain?q=netfl")], [("www.netflix.com", self.MAC)])
+        self.assertEqual(self.get("/api/domain?q=n"), [])                # too short to be worth a search of everything
+        self.assertEqual(self.get("/api/live"), [])
+        self.assertIn("joined", [e["kind"] for e in self.get("/api/events")] + ["joined"])
+        self.assertEqual(sorted(self.get("/api/health")), sorted(self.app.api_health({})))
+        self.assertEqual(self.get("/api/device?mac=" + self.MAC)["top"][0]["name"], "netflix.com")
+        self.assertEqual(self.call("GET", "/api/device?hours=soon")[0], 400)
+        self.assertEqual(self.call("GET", "/api/nothing-here")[0], 404)
+        blocked = self.get("/api/blocked")
+        self.assertEqual([l["id"] for l in blocked["lists"]][0], lanledger.THREATS)
+        self.assertEqual((blocked["rows"], blocked["can_lists"]), ([], False))
+
+    def test_the_to_do_list_and_ignoring_an_entry(self):
+        self.app.x("UPDATE devices SET net='guest' WHERE mac=?", (self.MAC,))
+        item = [i for i in self.get("/api/attention") if i["kind"] == "guest"][0]
+        self.post("/api/dismiss", {"key": item["key"]})
+        self.assertEqual([i for i in self.get("/api/attention") if i["kind"] == "guest"], [])
+
+    def test_blocking_allowing_and_a_daily_window(self):
+        self.assertEqual(self.post("/api/block", {"domain": "https://www.TikTok.com/@someone"})["domain"], "www.tiktok.com")
+        self.post("/api/block", {"domain": "example.org", "from": "21:00", "to": "07:00"})
+        self.assertEqual({(r["domain"], r["t_from"], r["t_to"]) for r in self.get("/api/blocked")["rows"]},
+                         {("www.tiktok.com", None, None), ("example.org", 1260, 420)})
+        self.post("/api/block", {"domain": "example.org", "from": "21:00", "to": "21:00"}, want=400)   # no time at all
+        self.post("/api/block", {"domain": "co.uk"}, want=400)                                          # a whole country's sites
+        self.post("/api/block", {"service": "TikTok"})
+        self.assertIn("tiktokcdn.com", [r["domain"] for r in self.get("/api/blocked")["rows"]])
+        self.post("/api/block", {"domain": "www.tiktok.com", "on": False})
+        self.assertNotIn("www.tiktok.com", [r["domain"] for r in self.get("/api/blocked")["rows"]])
+        self.post("/api/allow", {"domain": "good.example"})
+        self.assertEqual([a["domain"] for a in self.get("/api/blocked")["allowed"]], ["good.example"])
+        self.post("/api/allow", {"domain": "good.example", "on": False})
+        self.assertEqual(self.get("/api/blocked")["allowed"], [])
+
+    def test_lists_need_the_install_to_support_them(self):
+        self.post("/api/list", {"id": "no-such-list", "on": True}, want=400)
+        self.assertIn("not set up", self.post("/api/list", {"id": "ads", "on": True}, want=400)["error"])
+
+    def test_naming_merging_and_forgetting_a_device(self):
+        other = "a8:00:00:00:00:02"
+        self.app.seen(other, "10.0.0.9", "", int(time.time()))
+        self.post("/api/device", {"mac": other, "label": "Kitchen TV (Wi-Fi)", "owner": " Sam ", "known": True})
+        self.post("/api/device", {"mac": other, "parent": self.MAC})
+        devices = {d["mac"]: d for d in self.get("/api/devices")}
+        self.assertEqual((list(devices), devices[self.MAC]["also"][0]["mac"]), ([self.MAC], other))
+        self.post("/api/device", {"mac": self.MAC, "parent": self.MAC}, want=400)                       # into itself
+        self.post("/api/forget", {"mac": self.MAC})
+        self.assertEqual([d["mac"] for d in self.get("/api/devices")], [other])                         # its other half stands on its own again
+        self.assertEqual(self.app.q("SELECT 1 FROM dns_hourly WHERE dev=?", (self.MAC,)), [])
+
+    def test_checking_which_doors_a_device_leaves_open(self):
+        out = self.post("/api/ports", {"mac": self.MAC})
+        self.assertTrue(out["ok"])
+        self.assertEqual(self.get("/api/device?mac=" + self.MAC)["ports"]["open"], out["open"])
+        self.app.x("UPDATE devices SET ip='8.8.8.8' WHERE mac=?", (self.MAC,))
+        self.assertIn("own network", self.post("/api/ports", {"mac": self.MAC}, want=400)["error"])     # never somebody else's machine
+
+    def test_alert_settings(self):
+        self.post("/api/settings/notify", {"url": "not an address"}, want=400)
+        self.post("/api/settings/notify", {"url": "https://alerts.example/t", "plain": True})
+        s = self.get("/api/settings")
+        self.assertEqual((s["notify_url"], s["notify_plain"]), ("https://alerts.example/t", True))
+        self.post("/api/settings/notify", {"url": ""})
+        self.assertEqual(self.get("/api/settings")["notify_url"], "")
+
+    def test_the_speed_test(self):
+        class Download:
+            def __init__(self):
+                self.left = 40
+
+            def __enter__(self):
+                return self
+
+            def __exit__(self, *a):
+                pass
+
+            def read(self, n):
+                self.left -= 1
+                return b"x" * n if self.left > 0 else b""
+        clock = [1000.0]
+
+        def tick():                                                      # a pretend clock, so the test does not take the six seconds
+            clock[0] += .05
+            return clock[0]
+        with mock.patch("lanledger.urllib.request.urlopen", lambda req, timeout=0: Download()), mock.patch("lanledger.time.time", tick):
+            out = self.app.api_speedtest({})
+        self.assertGreater(out["down"], 1)
+        self.assertEqual(self.app.q("SELECT COUNT(*) n FROM speed")[0]["n"], 1)
+        self.app.speed_lock.acquire()
+        self.addCleanup(self.app.speed_lock.release)
+        self.assertIn("already running", self.post("/api/speedtest", {}, want=400)["error"])
+
+    def test_signing_out(self):
+        self.post("/api/logout", {})
+        self.assertEqual(self.call("GET", "/api/devices")[0], 401)
+
+
 class Hostile(Web):
     def raw(self, request, wait=5):
         s = socket.create_connection(("127.0.0.1", self.port))

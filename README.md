@@ -17,7 +17,7 @@ It is one Python program with no dependencies beyond what Raspberry Pi OS ships,
 ## What you get
 
 **Devices**
-- A full inventory, refreshed every minute, with a list view and a map view.
+- A full inventory, refreshed every minute, with a list view and a map view. With a mesh, the map groups devices by the unit each one connects through, which shows roughly where things are in the house. It zooms and pans, by mouse, touch or keyboard.
 - Names from wherever they can be found: ones you type, your Deco app (optional), what devices announce about themselves, and your router.
 - A best guess at anything unnamed ("Apple device", "Samsung TV", "Tuya-based smart plug"), clearly marked as a guess.
 - A to-do list at the top of the page: security warnings first, then new devices, devices hiding their activity, devices that mostly talk to ad trackers, devices on your guest Wi-Fi.
@@ -40,6 +40,8 @@ It is one Python program with no dependencies beyond what Raspberry Pi OS ships,
 
 **Extras**
 - A password for the dashboard.
+- Privacy controls: stop recording a device altogether, and keep device and site names out of alerts.
+- Backup and restore in one command.
 - Alerts to your phone when a new device joins, a security warning is raised, or the internet comes back after an outage.
 - TP-Link Deco integration: device names from the Deco app, wired or Wi-Fi, guest network, and an estimate of data used per device.
 - Works on a phone, and can be added to the home screen like an app.
@@ -87,6 +89,7 @@ Set these in front of the command, for example `sudo ENCRYPTED_DNS=1 ./install.s
 | `UPSTREAM1`, `UPSTREAM2` | Where lookups are forwarded | `1.1.1.1`, `9.9.9.9` |
 | `ENCRYPTED_DNS=1` | Forward lookups encrypted (DNS-over-HTTPS through dnscrypt-proxy), so your internet provider cannot read them. Falls back to the plain upstreams if it does not come up. | off |
 | `NOTIFY_URL` | Where to send alerts. Easier to set later in Settings. | none |
+| `EXTRA_ARGS` | Anything else to pass to lanledger, for settings the installer has no name for. For example `EXTRA_ARGS="--retention-days 14"` keeps two weeks of history instead of 30 days, and `--no-threat-list` or `--oui-url ""` switch off those downloads. | none |
 
 ### Updating
 
@@ -95,11 +98,24 @@ cd lanledger
 ./update.sh
 ```
 
-That fetches the latest version and reinstalls it. Your data is kept, and so are the installer options you used before: they are remembered in `/etc/lanledger/install.conf`. To change one, run the installer with it once, for example `sudo PORT=9090 ./install.sh`.
+That fetches the latest version and reinstalls it. Your data is kept, and so are the installer options you used before: they are remembered in `/etc/lanledger/install.conf`. To change one, run the installer with it once, for example `sudo PORT=9090 ./install.sh`. To forget one, give it the value `default`, as in `sudo NOTIFY_URL=default ./install.sh`.
+
+An update only restarts the DNS service when its settings changed, so most updates do not interrupt lookups. If dnsmasq refuses new settings, the installer puts the previous ones back and stops.
 
 **Coming from netinv?** That was this project's name until it was renamed. Update as above: the installer finds the old install and moves everything over (history, device names, password, block lists), then removes the old service. You will be asked to sign in again. The dashboard address does not change.
 
 If you installed before `update.sh` existed, run `git pull` and `sudo ./install.sh` (with your options) one last time.
+
+### Backing up, and moving to a new card or Pi
+
+Everything that cannot be fetched again is in one database: devices, names, history, blocks and the password. SD cards fail, so copy it somewhere else now and then:
+
+```
+sudo ./backup.sh                       # writes lanledger-backup-<date>.tar.gz here
+sudo ./backup.sh --restore that-file.tar.gz
+```
+
+A backup is safe to take while lanledger runs. To move house, install lanledger on the new card or Pi first, then restore; what was there before the restore is kept beside it. The file holds your household's history, the password's hash, and the Deco password if you connected one, so store it with care.
 
 ## Using it
 
@@ -116,6 +132,8 @@ A few things worth knowing:
 - **Naming a device also marks it as reviewed.** "Go through them" walks you through everything new.
 - **A block takes a few minutes to bite**, because devices remember addresses they already looked up.
 - **Blocking is for the whole network.** lanledger cannot block a site for one device only.
+- **If lanledger itself is in trouble**, the status at the top right turns red and says what: lookups not being recorded, or the network sweep finding nothing.
+- **A device can be left out.** In its panel, **Stop recording its activity** erases what was recorded for it and keeps nothing more. It stays in the device list, blocks still apply, and a known-bad site is still reported.
 - **"Lookups" are counts of address requests**, not time spent or data moved. The shares in "what it has been doing" are shares of lookups.
 
 ### Connecting a TP-Link Deco
@@ -129,7 +147,7 @@ Before you do:
 - **Data-used figures are estimates**, worked out from the speeds the Deco reports every 30 seconds.
 - You can test the connection by hand first: `python3 deco.py http://<deco-address>`.
 
-The Deco integration follows the protocol used by the [Home Assistant Deco integration](https://github.com/amosyuen/ha-tplink-deco). It has been tested against a simulated Deco. Reports from real hardware, working or not, are welcome.
+The Deco integration follows the protocol used by the [Home Assistant Deco integration](https://github.com/amosyuen/ha-tplink-deco). It runs against a real five-unit Deco mesh, and the tests check it against a pretend Deco that verifies the encryption. Reports from other models and firmware, working or not, are welcome.
 
 ### Security warnings
 
@@ -139,7 +157,7 @@ Two checks run all the time and put a red entry at the top of the to-do list. If
 
 - It usually means one of two things: the device is infected, or someone followed a bad link. A single hit from a phone or computer is often the second. Repeated hits, or any hit from a gadget nobody browses on, deserve a virus scan or unplugging the gadget.
 - Lists are sometimes wrong. If a site you trust is flagged, add it under **Exceptions** on the Blocked tab and it will not be reported again.
-- **Ignore** silences the warning for the sites listed in it. If the same device tries a different listed site later, the warning comes back.
+- **Ignore** silences the warning for what the device has tried so far. If it tries a listed site it had not tried before, the warning comes back.
 
 **Something is answering as your router.** Every sweep, lanledger checks which hardware answers for the router's address, and which hardware the Pi itself has been told is the router. If a device that is not part of your router or mesh shows up there twice in a row, you are warned.
 
@@ -148,7 +166,9 @@ Two checks run all the time and put a red entry at the top of the to-do list. If
 
 What these do not catch: connections made straight to a numeric address with no lookup, anything from a device that bypasses the Pi (see [Limits](#limits)), and an impostor that only fools other devices while staying quiet towards the Pi. Treat them as an early warning, not as proof that the network is clean.
 
-To switch the known-bad site check off entirely, start lanledger with `--no-threat-list`.
+Switching the list on blocks each listed site and everything under it, so `login.bad.example` is refused when `bad.example` is listed. That needs dnsmasq 2.86 or newer, which Raspberry Pi OS has shipped since 2023; on an older one lanledger falls back to blocking the exact names on the list.
+
+To switch the known-bad site check off entirely, reinstall with `sudo EXTRA_ARGS="--no-threat-list" ./install.sh`.
 
 ### Alerts
 
@@ -173,13 +193,15 @@ Be clear-eyed about what a DNS-based tool can and cannot do.
 
 - **The dashboard always has a password.** It asks you to choose one on first use, and shows nothing until you have. Five wrong tries lock out the device that made them, for longer each time.
 - **The dashboard is plain HTTP.** The password stops casual access on your own network. It does not protect against someone capturing traffic on that network. Do not expose the dashboard to the internet.
-- **Everything is stored on the Pi**, in `/var/lib/lanledger`. Activity is kept as hourly counts per device and site for 30 days (`--retention-days`).
+- **Everything is stored on the Pi**, in `/var/lib/lanledger`. Activity is kept as hourly counts per device and site for 30 days (change it with `EXTRA_ARGS="--retention-days N"`). The DNS service's own log, which lists every lookup with the address that made it, is kept for today and yesterday.
+- **One password sees everything.** Whoever can sign in sees every device's activity; there are no separate accounts. If that is too much for someone in the house, stop recording their devices (above), which also erases what was recorded.
+- **Alerts go through someone else's service.** By default an alert names the device and, for a security warning, the site. Tick **Leave device and site names out of alerts** in Settings and an alert says only that something happened.
 - **What leaves your network**, and only this:
   - Your DNS lookups, to the upstream servers, as with any DNS setup.
   - A connection check to `1.1.1.1` and `9.9.9.9` every minute.
   - Block lists you switch on, downloaded daily from GitHub.
-  - The malware and phishing list, downloaded daily from GitHub whether or not you block with it, because it is what the security warnings check against. Nothing about your devices or lookups is sent: the comparison happens on the Pi. Turn it off with `--no-threat-list`.
-  - The public register of hardware makers, downloaded about once a month from the IEEE, so devices show who made them. Nothing about your devices is sent. Turn it off with `--oui-url ""`.
+  - The malware and phishing list, downloaded daily from GitHub whether or not you block with it, because it is what the security warnings check against. Nothing about your devices or lookups is sent: the comparison happens on the Pi. Turn it off with `EXTRA_ARGS="--no-threat-list"`.
+  - The public register of hardware makers, downloaded about once a month from the IEEE, so devices show who made them. Nothing about your devices is sent. Turn it off with `EXTRA_ARGS='--oui-url ""'`.
   - A speed test download from Cloudflare, when you press the button.
   - Alerts, to the address you configure, if you configure one.
 - **Forgot the dashboard password?** On the Pi: `sudo -u lanledger python3 /opt/lanledger/lanledger.py --reset-password`, then open the dashboard and choose a new one. This also removes the stored Deco password.
@@ -195,7 +217,7 @@ Be clear-eyed about what a DNS-based tool can and cannot do.
 | `/var/lib/lanledger/oui.tsv` | Who makes which hardware addresses, refreshed monthly |
 | `/etc/lanledger/install.conf` | The installer options you gave, remembered for updates |
 | `/var/lib/lanledger-dns/` | Block files that lanledger writes and dnsmasq reads |
-| `/var/log/lanledger/dnsmasq.log` | Raw lookups, rotated daily, kept 3 days |
+| `/var/log/lanledger/dnsmasq.log` | Raw lookups, rotated daily, yesterday's kept |
 | `/etc/dnsmasq.d/lanledger.conf` | dnsmasq settings |
 | `/etc/systemd/system/lanledger*.{service,path}` | The service, and a watcher that makes dnsmasq re-read the block files |
 
@@ -214,11 +236,15 @@ sudo rm -rf /opt/lanledger /etc/lanledger /var/lib/lanledger /var/lib/lanledger-
   /etc/dnsmasq.d/lanledger.conf /etc/logrotate.d/lanledger /etc/systemd/system/lanledger*
 ```
 
-**Tests:** `python3 -m unittest discover tests` and `node tests/test_dashboard.js`. They need nothing installed and do not touch the network.
+**Tests:** `python3 -m unittest discover tests` and `node tests/test_dashboard.js`. They need nothing installed and do not touch the network: the web server, the DNS log reader and the Deco client are each run against stand-ins on this machine.
 
 ## Status
 
-This is a personal project that works for a home network. The core (inventory, activity, blocking, dashboard) runs on a real Pi. The newer pieces are less proven: the Deco integration has only met a simulator, and `ENCRYPTED_DNS=1` has not been tried across Pi OS versions. If something does not work for you, open an issue with the output of `journalctl -u lanledger -n 50`.
+This is a personal project that works for a home network. The core (inventory, activity, blocking, dashboard) runs on a real Pi. It has run for its author on a Pi 4 with a five-unit Deco mesh and about 57 devices. Less proven: other routers and Deco models, the security warnings (new, and built to stay quiet rather than cry wolf), and `ENCRYPTED_DNS=1`, which has not been tried across Pi OS versions. If something does not work for you, open an issue with the output of `journalctl -u lanledger -n 50`.
+
+## Licence
+
+[MIT](LICENSE). The block lists and the maker register that lanledger downloads belong to their own projects and come under their own terms; none of them is included here.
 
 ## Credits
 
