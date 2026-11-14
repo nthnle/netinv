@@ -1849,13 +1849,11 @@ class App:
         return {"ok": True}
 
 
-ICON = ('<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64"><defs><linearGradient id="g" x1="0" y1="0" x2="1" y2="1">'
-        '<stop offset="0" stop-color="#4cc9f0"/><stop offset="1" stop-color="#8b7cf6"/></linearGradient></defs>'
-        '<rect width="64" height="64" rx="14" fill="#090c13"/><g fill="none" stroke="url(#g)" stroke-width="3.6" stroke-linecap="round">'
-        '<path d="M32 32 15 17M32 32l20-11M32 32 17 50M32 32l18 15"/></g><g fill="url(#g)"><circle cx="32" cy="32" r="7.5"/>'
-        '<circle cx="15" cy="17" r="5"/><circle cx="52" cy="21" r="5"/><circle cx="17" cy="50" r="5"/><circle cx="50" cy="47" r="5"/></g></svg>')
+ICON = ('<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64"><rect width="64" height="64" rx="14" fill="#0a0f1d"/>'
+        '<g fill="none" stroke="#eef2f9" stroke-width="4"><rect x="12" y="12" width="40" height="40" rx="5"/>'
+        '<path d="M12 26h40M12 38h40M26 12v40"/></g><circle cx="39" cy="32" r="3.8" fill="#62d0f5"/></svg>')
 MANIFEST = {"name": "lanledger", "short_name": "lanledger", "start_url": "/", "display": "standalone",
-            "background_color": "#090c13", "theme_color": "#090c13",
+            "background_color": "#0a0f1d", "theme_color": "#0a0f1d",
             "icons": [{"src": "/icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any"}]}
 
 
