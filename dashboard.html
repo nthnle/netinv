@@ -1013,6 +1013,10 @@ function renderDevices(){
     const get = SORTS[sort.key][0];
     list = list.slice().sort((a, b) => { const x = get(a), y = get(b); return (x < y ? -1 : x > y ? 1 : 0) * sort.dir; });
   }
+  if (f) {  // a device named what was typed comes before one that only connects through, or is made by, something of that name
+    const named = d => [d.label, d.deco_name, d.mdns, d.hostname].join(" ").toLowerCase().includes(f) ? 0 : 1;
+    list = list.slice().sort((a, b) => named(a) - named(b));
+  }
   const focused = document.activeElement && document.activeElement.dataset ? document.activeElement.dataset.mac : null;
   const rows = list.map(d => {
     const name = devName(d);
