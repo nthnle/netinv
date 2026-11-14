@@ -221,6 +221,25 @@ class Endpoints(Web):
         self.post("/api/list", {"id": "no-such-list", "on": True}, want=400)
         self.assertIn("not set up", self.post("/api/list", {"id": "ads", "on": True}, want=400)["error"])
 
+    def test_erasing_the_history_keeps_the_devices(self):
+        now = int(time.time())
+        self.app.x("INSERT INTO usage_hourly(mac, hour, down, up) VALUES(?,?,?,?)", (self.MAC, now - now % 3600, 5000, 100))
+        self.app.record_threats({(self.MAC, "bad.example"): ("bad.example", now, now, 1)})
+        self.post("/api/dismiss", {"key": "threat:" + self.MAC})
+        self.post("/api/block", {"domain": "example.org"})
+        self.post("/api/erase", {})
+        for table in ("dns_hourly", "usage_hourly", "threats"):
+            self.assertEqual(self.app.q("SELECT COUNT(*) n FROM " + table)[0]["n"], 0, table)
+        self.assertEqual(self.app.q("SELECT key FROM dismissed WHERE key LIKE 'threat:%'"), [])
+        device = self.get("/api/devices")[0]
+        self.assertEqual((device["mac"], device["label"], device["owner"], device["queries"]), (self.MAC, "Kitchen TV", "Sam", 0))
+        self.assertEqual([r["domain"] for r in self.get("/api/blocked")["rows"]], ["example.org"])
+        self.assertEqual(self.get("/api/device?mac=" + self.MAC)["top"], [])
+        pending = {(self.MAC, "late.example", now - now % 3600): (3, 0)}   # read from the log before the erase, not yet written
+        with open(os.devnull) as f:
+            self.app.flush(pending, f, 1)
+        self.assertEqual(self.app.q("SELECT COUNT(*) n FROM dns_hourly")[0]["n"], 0)
+
     def test_naming_merging_and_forgetting_a_device(self):
         other = "a8:00:00:00:00:02"
         self.app.seen(other, "10.0.0.9", "", int(time.time()))

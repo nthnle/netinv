@@ -432,6 +432,7 @@ class App:
                 if ip:
                     self.ipmap[ip] = r["mac"]
         self.live = collections.deque(maxlen=3000)
+        self.erasing = False
         self.last_scan = 0
         self.hint_cache = (0, {})
         self.day_cache = (0, {}, [])
@@ -998,6 +999,11 @@ class App:
         return ts, self.ipmap.get(client, "ip:" + client), client, qtype, domain[:253]
 
     def flush(self, pending, f, inode, hits=None):
+        if self.erasing:  # the history was erased a moment ago: what was waiting to be written goes with it
+            self.erasing = False
+            pending.clear()
+            if hits:
+                hits.clear()
         if hits:
             self.record_threats(hits)
         if pending:
@@ -1393,6 +1399,18 @@ class App:
             self.ipmap.pop(ip, None)
         self.load_parents()
         self.day_cache = (0, {}, [])
+        return {"ok": True}
+
+    def api_erase(self, body):
+        """Start the history again from nothing: what was looked up, how much data moved, and the known-bad sites
+        that were tried. Devices and their names, blocks, settings and the log of comings and goings all stay."""
+        self.erasing = True  # the log reader drops the lookups it has not written yet, too
+        for t in ("dns_hourly", "usage_hourly", "threats"):
+            self.x("DELETE FROM " + t)
+        self.x("DELETE FROM dismissed WHERE key LIKE 'threat:%'")
+        self.live.clear()
+        self.day_cache, self.hint_cache = (0, {}, []), (0, {})
+        self.event("erased", "", "History erased")
         return {"ok": True}
 
     def load_private(self):
@@ -1969,7 +1987,7 @@ class Handler(BaseHTTPRequestHandler):
                 return self.send(200, {"ok": True}, token="")
             fn = {"/api/device": app.api_update, "/api/block": app.api_block, "/api/dismiss": app.api_dismiss,
                   "/api/forget": app.api_forget, "/api/allow": app.api_allow, "/api/list": app.api_list,
-                  "/api/ports": app.api_ports, "/api/speedtest": app.api_speedtest,
+                  "/api/ports": app.api_ports, "/api/speedtest": app.api_speedtest, "/api/erase": app.api_erase,
                   "/api/settings/deco": app.api_set_deco, "/api/settings/notify": app.api_set_notify}.get(self.path)
             if not fn:
                 return self.send(404, {"error": "not found"})

@@ -136,6 +136,7 @@ A few things worth knowing:
 - **Blocking is for the whole network.** lanledger cannot block a site for one device only.
 - **If lanledger itself is in trouble**, the status at the top right turns red and says what: lookups not being recorded, or the network sweep finding nothing.
 - **A device can be left out.** In its panel, **Stop recording its activity** erases what was recorded for it and keeps nothing more. It stays in the device list, blocks still apply, and a known-bad site is still reported.
+- **The history can be started again.** **Erase all history** in Settings removes everything recorded about what devices did, for all of them: lookups, data figures and known-bad sites tried. Devices, names, blocks and settings stay, and recording carries on.
 - **"Lookups" are counts of address requests**, not time spent or data moved. The shares in "what it has been doing" are shares of lookups.
 
 ### Connecting a TP-Link Deco

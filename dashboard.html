@@ -356,6 +356,7 @@ input[type=password]{flex:1 1 180px;max-width:360px}
     <div class="card"><h2>Dashboard password</h2><div id="set-pw"></div></div>
     <div class="card"><h2>TP-Link Deco</h2><div id="set-deco"></div></div>
     <div class="card"><h2>Alerts on your phone</h2><div id="set-notify"></div></div>
+    <div class="card"><h2>History</h2><div id="set-history"></div></div>
     <div class="card"><h2>Use it like an app</h2><p class="mute" style="margin:0">On a phone, open this page and choose “Add to Home Screen” from the browser's share or menu button. lanledger then opens full-screen from its own icon.</p></div>
   </section>
 
@@ -1319,7 +1320,7 @@ $("#liveblocked").addEventListener("click", e => {
 async function loadEvents(){
   const rows = await api("/api/events");
   const who = e => byMac.has(e.mac) ? el("button", {class:"link", onclick:() => openDevice(e.mac)}, e.name || e.mac) : (e.name || e.mac);
-  const say = e => e.kind === "internet_down" ? "Internet connection lost" : e.kind === "internet_up" ? `Internet back ${e.info || ""}`
+  const say = e => e.kind === "erased" ? "History erased" : e.kind === "internet_down" ? "Internet connection lost" :e.kind === "internet_up" ? `Internet back ${e.info || ""}`
     : e.kind === "threat" ? [who(e), " tried to reach a site on the malware and phishing list: ", el("span", {class:"mono"}, e.info)]
     : e.kind === "impostor" ? [who(e), " answered as your router"]
     : [who(e), e.kind === "joined" ? " joined your network for the first time" : e.kind === "online" ? " came online" : " went offline"];
@@ -1413,6 +1414,12 @@ async function loadSettings(){
     el("p", {style:"margin:10px 0 0"}, el("label", {for:"notify-plain", style:"display:flex;gap:8px;align-items:flex-start;cursor:pointer"}, plain,
       el("span", {}, "Leave device and site names out of alerts", el("span", {class:"mute", style:"display:block;font-size:13.5px"},
         "An alert then says only that something happened, such as “A device tried to reach a site on the malware and phishing list”, and you open lanledger for the details. The alert service never sees who or what.")))));
+  // history
+  fill($("#set-history"),
+    el("p", {}, "Erase everything recorded about what devices did: the sites they looked up, how much data they moved, and any known-bad sites they tried. Your devices and their names, blocked sites and settings all stay, and recording carries on from now."),
+    el("button", {class:"ghost", style:"color:var(--bad)", onclick:() => {
+      if (confirm("Erase all recorded activity, for every device?\n\nThis cannot be undone. Devices, names, blocks and settings are kept.")) act("/api/erase", {}, "History erased");
+    }}, "Erase all history"));
 }
 $("#loginform").addEventListener("submit", async e => {
   e.preventDefault();
